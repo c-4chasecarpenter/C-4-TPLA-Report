@@ -540,10 +540,12 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         r.style.marginTop = '18px';
       });
 
-      // Off-screen container sized to a landscape page so the layout stays readable.
+      // Render container at real coordinates (0,0) so html2canvas captures it —
+      // a negative/off-screen left makes html2canvas grab empty space (blank PDF).
+      // Tuck it behind the page (z-index:-1) and at the document top so it's not seen.
       const container = document.createElement('div');
       container.className = 'wrap pdf-export';
-      container.style.cssText = 'width:1120px;background:#fff;position:fixed;left:-10000px;top:0;padding:0;';
+      container.style.cssText = 'width:1120px;background:#fff;position:absolute;left:0;top:0;z-index:-1;padding:0;pointer-events:none;';
       container.innerHTML =
         '<div class="mast" style="margin-bottom:20px;padding-bottom:16px;">' +
         '<img src="/logo-c4.png" alt="C-4 Analytics" class="mast-logo" />' +
@@ -552,13 +554,17 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       container.appendChild(clone);
       document.body.appendChild(container);
 
+      // Make sure web fonts are loaded and we capture from the top of the document.
+      try { await (document as any).fonts?.ready; } catch { /* ignore */ }
+      window.scrollTo(0, 0);
+
       const safe = (dlFilename || 'TPLA-Report').replace(/[^a-z0-9\-_ .]/gi, '_');
       try {
         await html2pdf().set({
           margin: [8, 8, 8, 8],
           filename: `${safe}.pdf`,
           image: { type: 'jpeg', quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120, scrollX: 0, scrollY: 0, logging: false },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
           pagebreak: { mode: ['css', 'legacy'], before: '.pdf-break' },
         }).from(container).save();
