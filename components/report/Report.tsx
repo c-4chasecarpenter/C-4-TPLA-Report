@@ -398,7 +398,12 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     const clone = reportRef.current.cloneNode(true) as HTMLElement;
     clone.querySelector('.report-controls')?.remove();
     clone.querySelector('.dl-prompt')?.remove();
-    clone.querySelectorAll<HTMLElement>('.panel').forEach(el => { el.style.display = 'block'; });
+    // Guarantee panels are visible: swap class AND set inline style (belt + suspenders)
+    clone.querySelectorAll<HTMLElement>('.panel').forEach(el => {
+      el.classList.remove('panel');
+      el.classList.add('panel-show');
+      el.style.cssText = (el.getAttribute('style') || '') + '; display: block !important;';
+    });
 
     // Collect all styles: inline <style> tags + fetch linked CSS files (Next.js uses <link> in production)
     const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '').join('\n');
@@ -442,10 +447,10 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">',
       '<style>',
       styles,
-      '.panel{display:block!important;animation:none!important;}',
+      '.panel,.panel-show{display:block!important;animation:none!important;}',
       '.tabs,.report-controls,.dl-prompt{display:none!important;}',
       'body{background:var(--paper);}',
-      '.panel+.panel{border-top:2px solid var(--line);margin-top:32px;padding-top:24px;}',
+      '.panel+.panel,.panel-show+.panel-show{border-top:2px solid var(--line);margin-top:32px;padding-top:24px;}',
       '</style>',
       '</head>',
       '<body>',
