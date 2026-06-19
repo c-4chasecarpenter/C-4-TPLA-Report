@@ -241,19 +241,42 @@ textarea { resize: vertical; min-height: 60px; }
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
-.report-header { margin-bottom: 22px; display: flex; justify-content: space-between; align-items: flex-start; gap: 28px; flex-wrap: wrap; }
-.report-header-main { flex: 1 1 auto; min-width: 280px; }
+.report-header { margin-bottom: 22px; }
 
-/* Compact performance-benchmark key, top-right of the report header */
-.bench-key { flex: none; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); align-self: stretch; }
+/* ===== TWO-COLUMN PANEL LAYOUT (data left, summary rail right) ===== */
+.panel-body { display: flex; gap: 28px; align-items: flex-start; }
+.panel-content { flex: 1 1 auto; min-width: 0; }
+.panel-rail {
+  flex: none;
+  width: 320px;
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.rail-section .sec-label { margin-top: 0; }
+.rail-title { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); margin-bottom: 2px; }
+.rail-note { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+.panel-rail .takeaways-grid { grid-template-columns: 1fr; gap: 12px; }
+/* On narrower screens, stack the rail above the data (summary-first) */
+@media (max-width: 1100px) {
+  .panel-body { flex-direction: column-reverse; }
+  .panel-rail { position: static; width: 100%; max-height: none; overflow: visible; }
+}
+
+/* Performance-benchmark key — lives at the top of the right rail on every tab */
+.bench-key { width: 100%; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
 .bench-key-title { font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); padding: 8px 12px; background: #EEEBE9; border-bottom: 1px solid var(--line); }
-.bench-key table { width: auto; border-collapse: collapse; font-size: 11.5px; }
+.bench-key table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .bench-key th { font-size: 8.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 7px 12px 5px; white-space: nowrap; }
 .bench-key th.l { text-align: left; }
 .bench-key td { padding: 5px 12px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; border-top: 1px solid var(--line-soft); }
 .bench-key td.l { text-align: left; display: flex; align-items: center; gap: 7px; font-weight: 700; color: var(--ink); }
 .bench-key .tier-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-@media (max-width: 760px) { .bench-key { width: 100%; } .bench-key table { width: 100%; } }
 .report-title {
   font-size: 30px;
   font-weight: 800;
@@ -676,6 +699,10 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
   .panel { display: block !important; animation: none; }
   /* ...and start each platform / overview tab on its own page. */
   .panel + .panel { break-before: page; page-break-before: always; }
+  /* Flatten the two-column layout so the rail can't clip via sticky/overflow. */
+  .panel-body { display: block !important; }
+  .panel-rail { position: static !important; width: 100% !important; max-height: none !important; overflow: visible !important; margin-top: 18px; }
+  .panel-rail .takeaways-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
   .panel-head { padding-top: 4px; }
   /* Keep individual cards, charts and tables from splitting across pages. */
   .card, .proj, .takeaway-item, .rank-card, .kpi, table { break-inside: avoid; page-break-inside: avoid; }

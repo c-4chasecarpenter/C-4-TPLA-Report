@@ -529,6 +529,17 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         if (i > 0) p.classList.add('pdf-break');
       });
 
+      // Flatten the two-column layout: html2canvas renders screen media, so the
+      // sticky/overflow rail would clip. Stack data then rail full-width per tab.
+      clone.querySelectorAll<HTMLElement>('.panel-body').forEach(b => { b.style.display = 'block'; });
+      clone.querySelectorAll<HTMLElement>('.panel-rail').forEach(r => {
+        r.style.position = 'static';
+        r.style.width = '100%';
+        r.style.maxHeight = 'none';
+        r.style.overflow = 'visible';
+        r.style.marginTop = '18px';
+      });
+
       // Off-screen container sized to a landscape page so the layout stays readable.
       const container = document.createElement('div');
       container.className = 'wrap pdf-export';
@@ -601,18 +612,15 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         </div>
       )}
 
-      {/* Report header — title/meta on the left, performance key on the right */}
+      {/* Report header — title and meta (full width) */}
       <div className="report-header">
-        <div className="report-header-main">
-          <div className="eyebrow">Third Party Lead Source Report</div>
-          <div className="report-title">{d.meta.deal || 'Dealership'}</div>
-          <div className="report-meta">
-            {d.meta.timeframe ? d.meta.timeframe + ' · ' : ''}
-            {d.months} month{d.months > 1 ? 's' : ''} of data · generated {today}
-          </div>
-          {d.meta.description && <div className="report-desc">{d.meta.description}</div>}
+        <div className="eyebrow">Third Party Lead Source Report</div>
+        <div className="report-title">{d.meta.deal || 'Dealership'}</div>
+        <div className="report-meta">
+          {d.meta.timeframe ? d.meta.timeframe + ' · ' : ''}
+          {d.months} month{d.months > 1 ? 's' : ''} of data · generated {today}
         </div>
-        <BenchmarkKey t={t} showSold={showSold} />
+        {d.meta.description && <div className="report-desc">{d.meta.description}</div>}
       </div>
 
       {/* Platform tabs */}
@@ -631,6 +639,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
 
       {/* ── OVERVIEW ── */}
       <div className={'panel' + (tab === 'overview' ? ' active' : '')}>
+        <div className="panel-body">
+          <div className="panel-content">
 
           {/* KPI tiles */}
           <div className="kpis">
@@ -730,14 +740,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             </>
           )}
 
-          {/* Key Takeaways */}
-          {takeaways.length > 0 && (
-            <>
-              <div className="sec-label"><h3>Key Takeaways</h3><span className="note">Data-driven recommendations for the dealership GM</span></div>
-              <TakeawayCards takeaways={takeaways} />
-            </>
-          )}
-
           {/* All Data Sources (unmatched) */}
           {d.unmatchedSources.length > 0 && (
             <div className="unmatched-block">
@@ -755,36 +757,39 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             <Chart d={d} bm={d.comb.bm} showSold={showSold} />
             <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
           </div>
-        </div>
+
+          </div>{/* /panel-content */}
+          <Rail t={t} showSold={showSold} takeaways={takeaways} note="Data-driven recommendations for the dealership GM" />
+        </div>{/* /panel-body */}
+      </div>
 
       {/* ── PER PLATFORM ── */}
       {d.data.map((s, i) => {
         const ptw = generatePlatformTakeaways(s, d, showSold);
         return (
           <div className={'panel' + (tab === 'p' + i ? ' active' : '')} key={i}>
-            <div className="panel-head">
-              <div className="h">{s.name}</div>
-              <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
-            </div>
-            {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
-            <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
-            {showSold && (
-              <>
-                <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
-                <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
-              </>
-            )}
-            {ptw.length > 0 && (
-              <>
-                <div className="sec-label"><h3>Key Takeaways</h3><span className="note">{s.name} analysis</span></div>
-                <TakeawayCards takeaways={ptw} />
-              </>
-            )}
-            <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
-            <div className="card">
-              <Chart d={d} bm={s.bm} showSold={showSold} />
-              <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
-            </div>
+            <div className="panel-body">
+              <div className="panel-content">
+                <div className="panel-head">
+                  <div className="h">{s.name}</div>
+                  <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
+                </div>
+                {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+                <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
+                {showSold && (
+                  <>
+                    <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
+                    <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
+                  </>
+                )}
+                <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
+                <div className="card">
+                  <Chart d={d} bm={s.bm} showSold={showSold} />
+                  <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
+                </div>
+              </div>{/* /panel-content */}
+              <Rail t={t} showSold={showSold} takeaways={ptw} note={`${s.name} analysis`} />
+            </div>{/* /panel-body */}
           </div>
         );
       })}
@@ -838,5 +843,21 @@ function BenchmarkKey({ t, showSold }: { t: Thresholds; showSold: boolean }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// Right-side summary rail shown on every tab: benchmarks on top, takeaways below.
+function Rail({ t, showSold, takeaways, note }: { t: Thresholds; showSold: boolean; takeaways: Takeaway[]; note: string }) {
+  return (
+    <aside className="panel-rail">
+      <BenchmarkKey t={t} showSold={showSold} />
+      {takeaways.length > 0 && (
+        <div className="rail-section">
+          <div className="rail-title">Key Takeaways</div>
+          <div className="rail-note">{note}</div>
+          <TakeawayCards takeaways={takeaways} />
+        </div>
+      )}
+    </aside>
   );
 }
