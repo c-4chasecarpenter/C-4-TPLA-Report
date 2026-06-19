@@ -43,7 +43,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
           <div className="slider-wrap">
             <input type="range" className="proj-slider" min={1} max={max} step={0.5} value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
-              style={{ background: `linear-gradient(90deg, var(--petrol) 0%, var(--petrol) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+              style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
             <div className="ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>{max}%</span></div>
           </div>
           <div className={'pp-cpa ' + cls}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>

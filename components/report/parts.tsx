@@ -100,20 +100,20 @@ export function Chart({ d, bm, showSold }: { d: ReportData; bm: ReportData['comb
             const gv = bm[k].good, sv = bm[k].sold;
             return (
               <g key={k}>
-                <rect x={cx - bw - 2} y={y(gv)} width={bw} height={H - padB - y(gv)} rx={3} fill="var(--petrol)" />
-                <text x={cx - bw / 2 - 2} y={y(gv) - 6} textAnchor="middle" fontSize="10" fill="var(--ink-soft)" fontFamily="Space Grotesk" fontWeight="600">{gv}</text>
+                <rect x={cx - bw - 2} y={y(gv)} width={bw} height={H - padB - y(gv)} rx={3} fill="#131010" />
+                <text x={cx - bw / 2 - 2} y={y(gv) - 6} textAnchor="middle" fontSize="10" fill="#453F3F" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif" fontWeight="700">{gv}</text>
                 {showSold && <>
-                  <rect x={cx + 2} y={y(sv)} width={bw} height={H - padB - y(sv)} rx={3} fill="var(--cpa-ok)" />
-                  <text x={cx + bw / 2 + 2} y={y(sv) - 6} textAnchor="middle" fontSize="10" fill="var(--cpa-ok)" fontFamily="Space Grotesk" fontWeight="600">{sv}</text>
+                  <rect x={cx + 2} y={y(sv)} width={bw} height={H - padB - y(sv)} rx={3} fill="#B7791F" />
+                  <text x={cx + bw / 2 + 2} y={y(sv) - 6} textAnchor="middle" fontSize="10" fill="#B7791F" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif" fontWeight="700">{sv}</text>
                 </>}
-                <text x={cx} y={H - padB + 18} textAnchor="middle" fontSize="11" fill="var(--muted)" fontFamily="Inter">{d.mlabels[i]}</text>
+                <text x={cx} y={H - padB + 18} textAnchor="middle" fontSize="11" fill="#8E8382" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif">{d.mlabels[i]}</text>
               </g>
             );
           })}
         </svg>
       </div>
       <div className="chart-legend">
-        <span><span className="lswatch" style={{ background: 'var(--petrol)' }} />Good leads</span>
+        <span><span className="lswatch" style={{ background: '#131010' }} />Good leads</span>
         {showSold && <span><span className="lswatch" style={{ background: 'var(--cpa-ok)' }} />Vehicles sold</span>}
       </div>
     </>

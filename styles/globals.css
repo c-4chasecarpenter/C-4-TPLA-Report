@@ -33,6 +33,7 @@
 html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: 'Hanken Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 15px;
   background: var(--paper);
   color: var(--ink);
   line-height: 1.5;
@@ -438,11 +439,11 @@ textarea { resize: vertical; min-height: 60px; }
 /* ===== TABLES ===== */
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mtab thead th {
-  font-size: 9px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink-soft);
   text-align: right;
   padding: 14px 14px 9px;
   border-bottom: 1px solid var(--line);
@@ -504,11 +505,11 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 
 /* ===== COMPARISON TABLE ===== */
 .cmp thead th {
-  font-size: 9px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--ink-soft);
   text-align: right;
   padding: 16px 16px 13px;
   border-bottom: 1px solid var(--line);
@@ -578,14 +579,14 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
   overflow: hidden;
 }
 .proj-head { padding: 16px 20px 0; }
-.proj-head h4 { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
-.proj-head .sub { font-size: 12.5px; color: var(--muted); max-width: 62ch; }
+.proj-head h4 { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+.proj-head .sub { font-size: 13.5px; color: var(--muted); max-width: 62ch; }
 .proj-body { display: grid; grid-template-columns: 1fr auto 1.6fr; gap: 0; align-items: stretch; padding: 16px 20px 20px; }
 .proj-now, .proj-what { padding: 16px 18px; border-radius: 6px; }
 .proj-now { background: var(--paper); border: 1px solid var(--line); }
 .proj-what { background: var(--orange-tint); border: 1px solid var(--orange-tint-border); }
 .proj-arrow { display: flex; align-items: center; justify-content: center; padding: 0 18px; color: var(--muted); font-size: 22px; }
-.pp-lab { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.pp-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .pp-rate { font-size: 30px; font-weight: 800; line-height: 1; margin: 8px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .pp-cpa { font-size: 18px; font-weight: 700; display: inline-block; padding: 3px 11px; border-radius: 4px; margin-top: 4px; }
 .pp-cpa.cpa-good { background: var(--cpa-good-bg); color: var(--cpa-good); }
@@ -715,7 +716,7 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 
 /* ===== RANKINGS ===== */
 .rankings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: stretch; }
-.rank-card { padding: 0; overflow: hidden; }
+.rank-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .rank-card-head {
   font-size: 9px;
   font-weight: 800;
@@ -723,9 +724,10 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
   text-transform: uppercase;
   color: var(--muted);
   padding: 14px 18px 10px;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line);
+  flex: none;
 }
-.rank-item { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line-soft); }
+.rank-item { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line-soft); flex: 1; }
 .rank-item:last-child { border-bottom: none; }
 .rank-pos {
   width: 26px; height: 26px;

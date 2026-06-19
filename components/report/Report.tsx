@@ -296,15 +296,42 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     setShowDlPrompt(true);
   }
 
-  function doDownload() {
+  async function doDownload() {
     if (!reportRef.current) return;
     const clone = reportRef.current.cloneNode(true) as HTMLElement;
     clone.querySelector('.report-controls')?.remove();
     clone.querySelector('.dl-prompt')?.remove();
-    const styles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '').join('\n');
+
+    // Collect all styles: inline <style> tags + fetch linked CSS files (Next.js uses <link> in production)
+    const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '').join('\n');
+    const linkedStyles = await Promise.all(
+      Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
+        .filter(l => !l.href.includes('fonts.googleapis'))
+        .map(async l => {
+          try { const r = await fetch(l.href); return r.ok ? await r.text() : ''; } catch { return ''; }
+        })
+    );
+    const styles = [inlineStyles, ...linkedStyles].join('\n');
+
+    // Embed C-4 logo as base64 so the file works without a server
+    let logoSrc = '/logo-c4.png';
+    try {
+      const r = await fetch('/logo-c4.png');
+      if (r.ok) {
+        const blob = await r.blob();
+        logoSrc = await new Promise<string>((res) => {
+          const reader = new FileReader();
+          reader.onloadend = () => res(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch { /* use relative path fallback */ }
+
     const safeTitle = (dlFilename || 'TPLA Report').replace(/[<>&"]/g, c =>
       c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : '&quot;'
     );
+    const mastHtml = `<div class="mast"><img src="${logoSrc}" alt="C-4 Analytics" class="mast-logo" /><div class="mast-text"><div class="mast-eyebrow">C-4 Analytics</div><h1>Third Party Lead Source Report</h1></div></div>`;
+
     const html = [
       '<!DOCTYPE html>',
       '<html lang="en">',
@@ -313,7 +340,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
       `<title>${safeTitle}</title>`,
       '<link rel="preconnect" href="https://fonts.googleapis.com">',
-      '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">',
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+      '<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">',
       '<style>',
       styles,
       '.panel{display:block!important;animation:none!important;}',
@@ -324,7 +352,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '</head>',
       '<body>',
       '<div class="wrap">',
-      '<div class="mast"><span class="gauge"></span><h1>Third Party Lead Source Report</h1></div>',
+      mastHtml,
       clone.outerHTML,
       '</div>',
       '</body>',
