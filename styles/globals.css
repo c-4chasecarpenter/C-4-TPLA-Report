@@ -305,7 +305,7 @@ textarea { resize: vertical; min-height: 60px; }
   flex: none;
   font: inherit;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -342,7 +342,7 @@ textarea { resize: vertical; min-height: 60px; }
   margin: 26px 2px 4px;
 }
 .panel-head .h { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
-.panel-head .spend-tag { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.panel-head .spend-tag { font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .panel-head .spend-tag b { color: var(--ink-soft); font-weight: 700; }
 
 /* ===== VERDICT BANNER ===== */
@@ -380,14 +380,14 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .tile { background: var(--surface); padding: 20px 22px; }
 .tile .t-lab {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .tile .t-val {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   margin-top: 5px;
   line-height: 1;
@@ -417,14 +417,14 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .kpi.sold-only::before { background: var(--cpa-ok); }
 .kpi .k-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .kpi .k-val {
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 800;
   margin-top: 6px;
   line-height: 1;
@@ -434,7 +434,7 @@ textarea { resize: vertical; min-height: 60px; }
 .kpi .k-val.cpa-good { color: var(--cpa-good); }
 .kpi .k-val.cpa-ok { color: var(--cpa-ok); }
 .kpi .k-val.cpa-bad { color: var(--cpa-bad); }
-.kpi .k-foot { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.kpi .k-foot { font-size: 13px; color: var(--muted); margin-top: 6px; }
 
 /* ===== TABLES ===== */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -589,7 +589,7 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 .proj-now { background: var(--paper); border: 1px solid var(--line); }
 .proj-what { background: var(--orange-tint); border: 1px solid var(--orange-tint-border); }
 .proj-arrow { display: flex; align-items: center; justify-content: center; padding: 0 18px; color: var(--muted); font-size: 22px; }
-.pp-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.pp-lab { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .pp-rate { font-size: 30px; font-weight: 800; line-height: 1; margin: 8px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .pp-cpa { font-size: 18px; font-weight: 700; display: inline-block; padding: 3px 11px; border-radius: 4px; margin-top: 4px; }
 .pp-cpa.cpa-good { background: var(--cpa-good-bg); color: var(--cpa-good); }
@@ -719,15 +719,16 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 
 /* ===== RANKINGS ===== */
 .rankings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: stretch; }
-.rank-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.rank-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
 .rank-card-head {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
-  padding: 14px 18px 10px;
+  color: var(--ink-soft);
+  padding: 12px 18px 10px;
   border-bottom: 1px solid var(--line);
+  background: #EEEBE9;
   flex: none;
 }
 .rank-item { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex: 1; min-height: 58px; }
@@ -757,9 +758,9 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 @media (max-width: 900px) { .pbars-col-2, .pbars-col-3 { grid-template-columns: 1fr; } }
 .pbar-group { display: flex; flex-direction: column; gap: 10px; }
 .pbar-gtitle {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 4px;

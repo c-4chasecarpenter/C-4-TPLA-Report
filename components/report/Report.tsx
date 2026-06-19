@@ -398,6 +398,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     const clone = reportRef.current.cloneNode(true) as HTMLElement;
     clone.querySelector('.report-controls')?.remove();
     clone.querySelector('.dl-prompt')?.remove();
+    clone.querySelectorAll<HTMLElement>('.panel').forEach(el => { el.style.display = 'block'; });
 
     // Collect all styles: inline <style> tags + fetch linked CSS files (Next.js uses <link> in production)
     const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '').join('\n');
