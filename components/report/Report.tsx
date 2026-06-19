@@ -398,11 +398,19 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     const clone = reportRef.current.cloneNode(true) as HTMLElement;
     clone.querySelector('.report-controls')?.remove();
     clone.querySelector('.dl-prompt')?.remove();
-    // Guarantee panels are visible: swap class AND set inline style (belt + suspenders)
-    clone.querySelectorAll<HTMLElement>('.panel').forEach(el => {
-      el.classList.remove('panel');
-      el.classList.add('panel-show');
-      el.style.cssText = (el.getAttribute('style') || '') + '; display: block !important;';
+
+    // Make the tab navigation work in the standalone file (no React/event handlers
+    // survive cloneNode). Index each tab + panel in document order, strip any inline
+    // display so CSS controls visibility, then a small injected script wires clicks.
+    const tabButtons = Array.from(clone.querySelectorAll<HTMLElement>('.tabs .tab'));
+    const panels = Array.from(clone.querySelectorAll<HTMLElement>('.panel'));
+    tabButtons.forEach((btn, i) => btn.setAttribute('data-tab-index', String(i)));
+    panels.forEach((p, i) => {
+      p.setAttribute('data-panel-index', String(i));
+      p.style.removeProperty('display');
+      // first panel active, rest hidden — script re-applies this on load too
+      if (i === 0) p.classList.add('active');
+      else p.classList.remove('active');
     });
 
     // Collect all styles: inline <style> tags + fetch linked CSS files (Next.js uses <link> in production)
@@ -447,10 +455,15 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&display=swap" rel="stylesheet">',
       '<style>',
       styles,
-      '.panel,.panel-show{display:block!important;animation:none!important;}',
-      '.tabs,.report-controls,.dl-prompt{display:none!important;}',
+      // Keep the tab bar visible & interactive; only hide the editor controls.
+      // The sticky tab bar stays put when not printing. Panel show/hide is left to
+      // the original .panel / .panel.active rules so the injected script can toggle.
+      '.report-controls,.dl-prompt{display:none!important;}',
+      '.tabs{position:static;cursor:default;}',
+      '.tab{cursor:pointer;}',
       'body{background:var(--paper);}',
-      '.panel+.panel,.panel-show+.panel-show{border-top:2px solid var(--line);margin-top:32px;padding-top:24px;}',
+      // When printing, expand every panel so the full report is captured.
+      '@media print{.tabs{display:none!important;}.panel{display:block!important;page-break-inside:avoid;break-inside:avoid;margin-top:30px;}}',
       '</style>',
       '</head>',
       '<body>',
@@ -458,6 +471,19 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       mastHtml,
       clone.outerHTML,
       '</div>',
+      // Vanilla tab switching for the standalone file.
+      '<script>',
+      '(function(){',
+      "var tabs=[].slice.call(document.querySelectorAll('.tabs .tab'));",
+      "var panels=[].slice.call(document.querySelectorAll('[data-panel-index]'));",
+      'function show(i){i=String(i);',
+      "tabs.forEach(function(t){t.classList.toggle('active',t.getAttribute('data-tab-index')===i);});",
+      "panels.forEach(function(p){p.classList.toggle('active',p.getAttribute('data-panel-index')===i);});",
+      '}',
+      "tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab-index'));});});",
+      'show(0);',
+      '})();',
+      '</script>',
       '</body>',
       '</html>',
     ].join('\n');
