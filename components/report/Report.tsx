@@ -462,8 +462,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '.tabs{position:static;cursor:default;}',
       '.tab{cursor:pointer;}',
       'body{background:var(--paper);}',
-      // When printing, expand every panel so the full report is captured.
-      '@media print{.tabs{display:none!important;}.panel{display:block!important;page-break-inside:avoid;break-inside:avoid;margin-top:30px;}}',
+      // When printing, expand every panel and start each tab on its own page.
+      '@media print{.tabs{display:none!important;}.panel{display:block!important;}.panel+.panel{break-before:page;page-break-before:always;}.card,.proj,.takeaway-item,.rank-card,.kpi,table{break-inside:avoid;page-break-inside:avoid;}}',
       '</style>',
       '</head>',
       '<body>',

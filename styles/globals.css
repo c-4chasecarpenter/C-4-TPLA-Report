@@ -243,7 +243,7 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .report-header { margin-bottom: 22px; }
 .report-title {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
   margin-top: 4px;
@@ -556,7 +556,7 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 
 /* ===== SECTION LABELS ===== */
 .sec-label { display: flex; align-items: baseline; gap: 10px; margin: 24px 2px 12px; }
-.sec-label h3 { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; letter-spacing: 0.06em; }
+.sec-label h3 { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase; letter-spacing: 0.06em; }
 .sec-label .note { font-size: 12.5px; color: var(--muted); }
 
 .method {
@@ -655,13 +655,18 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 @media print {
   body { background: #fff; }
   .wrap { padding: 0; max-width: none; }
-  .no-print { display: none !important; }
+  .no-print, .report-controls, .dl-prompt { display: none !important; }
   .card, .kpi, .method, .tiles { border: 1px solid #ccc; }
   #setup { display: none; }
   #report { display: block !important; }
-  .tabs { display: none; }
-  .panel { display: block !important; animation: none; break-inside: avoid; margin-bottom: 30px; }
-  .panel-head { border-top: 1px solid #ddd; padding-top: 18px; }
+  .tabs { display: none !important; }
+  /* Expand every panel for a full-report PDF... */
+  .panel { display: block !important; animation: none; }
+  /* ...and start each platform / overview tab on its own page. */
+  .panel + .panel { break-before: page; page-break-before: always; }
+  .panel-head { padding-top: 4px; }
+  /* Keep individual cards, charts and tables from splitting across pages. */
+  .card, .proj, .takeaway-item, .rank-card, .kpi, table { break-inside: avoid; page-break-inside: avoid; }
   @page { margin: 12mm; }
 }
 
@@ -730,6 +735,9 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
   border-bottom: 1px solid var(--line);
   background: #EEEBE9;
   flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
 }
 .rank-item { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex: 1; min-height: 58px; }
 .rank-item:last-child { border-bottom: none; }
