@@ -169,7 +169,7 @@
   td.best .mk{font-size:10px;font-weight:600;color:var(--cpa-good);text-transform:uppercase;letter-spacing:.04em;margin-left:6px}
 
   /* comparison */
-  .cmp thead th{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:right;padding:0 16px 11px;border-bottom:1px solid var(--line)}
+  .cmp thead th{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:right;padding:16px 16px 13px;border-bottom:1px solid var(--line)}
   .cmp thead th.l{text-align:left}
   .cmp tbody td{padding:15px 16px;border-bottom:1px solid var(--line-soft);text-align:right;font-variant-numeric:tabular-nums;font-family:'Space Grotesk';font-weight:600;font-size:14px}
   .cmp tbody td.l{text-align:left;font-family:'Inter';color:var(--ink)}
@@ -303,8 +303,14 @@
 .muted{color:var(--muted)}
 .cmp tbody tr:not([style]):not(.winrow) td.l b{color:var(--ink)}
 
+/* ===== Download prompt ===== */
+.dl-prompt{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--petrol-soft);border:1px solid #CFE0E3;border-radius:11px;margin-bottom:14px;flex-wrap:wrap}
+.dl-prompt-label{font-size:12.5px;font-weight:600;color:var(--petrol-deep);white-space:nowrap;flex:none}
+.dl-filename-input{flex:1;min-width:220px;font:inherit;font-size:14px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.dl-filename-input:focus{outline:none;border-color:var(--petrol);box-shadow:0 0 0 3px rgba(19,78,94,.12)}
+
 /* ===== Rankings ===== */
-.rankings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.rankings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:stretch}
 .rank-card{padding:0;overflow:hidden}
 .rank-card-head{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 18px 10px;border-bottom:1px solid var(--line-soft)}
 .rank-item{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line-soft)}
@@ -313,6 +319,7 @@
 .rank-pos-1{background:var(--petrol);color:#fff}
 .rank-pos-2{background:var(--line);color:var(--ink-soft)}
 .rank-pos-3{background:var(--paper);border:1px solid var(--line);color:var(--muted)}
+.rank-pos-rest{background:transparent;border:1px solid var(--line-soft);color:var(--muted)}
 .rank-name{flex:1;font-size:14px;font-weight:600;color:var(--ink)}
 .rank-val{font-family:'Space Grotesk';font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
 

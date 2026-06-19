@@ -1,11 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { ReportData } from '@/lib/types';
+import { ReportData, PlatformAgg } from '@/lib/types';
 import { fmt$, pct, metricsRow } from '@/lib/format';
 import { Tiles, Verdict, MonthlyTable, Chart } from './parts';
 import ProjectionSlider from './ProjectionSlider';
-import GeneratePresentationButton from '../GeneratePresentationButton';
 
 // ---- Key takeaways ----
 type Takeaway = { type: 'scale' | 'cut' | 'watch' | 'info'; headline: string; detail: string };
@@ -75,6 +74,83 @@ function generateTakeaways(d: ReportData, showSold: boolean): Takeaway[] {
         headline: 'Overall: Blended spend is underperforming',
         detail: `Combined cost per sale of ${fmt$(cr.cpa!)} is above your red threshold. Shift budget away from the weakest platforms and concentrate spend on the top performers.`,
       });
+    }
+  }
+
+  return items;
+}
+
+function generatePlatformTakeaways(s: PlatformAgg, d: ReportData, showSold: boolean): Takeaway[] {
+  const items: Takeaway[] = [];
+  const hasSold = d.data.some(src => src.sold > 0);
+  const ps = s.monthly * d.months;
+  const r = metricsRow(ps, s.good, s.sold, d.t);
+
+  if (s.monthly === 0) {
+    items.push({
+      type: 'info',
+      headline: 'No budget configured',
+      detail: `No monthly spend has been entered for ${s.name}. Add a monthly spend amount to enable cost-per-lead and cost-per-sale analysis.`,
+    });
+    return items;
+  }
+
+  if (s.good === 0) {
+    items.push({
+      type: 'watch',
+      headline: 'No leads tracked this period',
+      detail: `No good leads were recorded from ${s.name}. Verify the CRM source name mapping or confirm this platform was active during the reporting period.`,
+    });
+    return items;
+  }
+
+  if (r.cplCls === 'good') {
+    items.push({
+      type: 'scale',
+      headline: 'Strong cost per good lead',
+      detail: `At ${fmt$(r.cpl!, 2)}/lead, ${s.name} is delivering leads efficiently — well within the green threshold.`,
+    });
+  } else if (r.cplCls === 'bad') {
+    items.push({
+      type: 'watch',
+      headline: 'High cost per good lead',
+      detail: `Cost per good lead is ${fmt$(r.cpl!, 2)} — above the red threshold. The platform is generating activity but at an inefficient rate. Monitor closely.`,
+    });
+  } else if (r.cplCls === 'ok') {
+    items.push({
+      type: 'watch',
+      headline: 'Cost per lead in the middle range',
+      detail: `At ${fmt$(r.cpl!, 2)}/lead, ${s.name} is in the amber zone. Compare against other platforms to determine if budget could be better allocated elsewhere.`,
+    });
+  }
+
+  if (showSold) {
+    if (s.sold === 0 && hasSold) {
+      items.push({
+        type: 'watch',
+        headline: 'Leads with no closed deals',
+        detail: `${s.good.toLocaleString()} leads came in from ${s.name} but zero sold units are logged. Either deals aren't closing from this source, or they aren't being tracked correctly in the CRM — confirm with the sales manager.`,
+      });
+    } else if (s.sold > 0) {
+      if (r.cpaCls === 'good') {
+        items.push({
+          type: 'scale',
+          headline: 'Top performer — scale this investment',
+          detail: `Closing at ${pct(r.close)} with a cost of ${fmt$(r.cpa!)}/sale — solidly in the green. Consider increasing budget or requesting more listing placements from this vendor.`,
+        });
+      } else if (r.cpaCls === 'bad') {
+        items.push({
+          type: 'cut',
+          headline: 'Consider reducing or cutting spend',
+          detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend reducing budget or renegotiating the contract before the next cycle.`,
+        });
+      } else if (r.cpaCls === 'ok') {
+        items.push({
+          type: 'watch',
+          headline: 'Performing in the middle range',
+          detail: `Cost per sale of ${fmt$(r.cpa!)} is in the amber zone with a ${pct(r.close)} close rate. Monitor and look for ways to improve lead nurturing to push this platform into the green.`,
+        });
+      }
     }
   }
 
@@ -167,11 +243,29 @@ function PlatformBars({ d, showSold }: { d: ReportData; showSold: boolean }) {
   );
 }
 
+// ---- Shared takeaway card renderer ----
+function TakeawayCards({ takeaways }: { takeaways: Takeaway[] }) {
+  return (
+    <div className="takeaways-grid">
+      {takeaways.map((tw, i) => (
+        <div key={i} className={`takeaway-item tway-${tw.type}`}>
+          <span className="tway-badge">{tw.type === 'scale' ? 'Scale' : tw.type === 'cut' ? 'Reduce' : tw.type === 'watch' ? 'Watch' : 'Note'}</span>
+          <div className="tway-headline">{tw.headline}</div>
+          <div className="tway-detail">{tw.detail}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---- Main report ----
-export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: () => void }) {
+export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: (data: ReportData) => void }) {
   const t = d.t;
   const [tab, setTab] = useState('overview');
   const [showSold, setShowSold] = useState(true);
+  const [showDlPrompt, setShowDlPrompt] = useState(false);
+  const [dlFilename, setDlFilename] = useState('');
+  const reportRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
 
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -187,21 +281,72 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
   const rankedCPL = d.data
     .filter(s => s.good > 0 && s.monthly > 0)
     .map(s => { const r = metricsRow(s.monthly * d.months, s.good, s.sold, t); return { name: s.name, val: r.cpl!, cls: r.cplCls }; })
-    .sort((a, b) => a.val - b.val)
-    .slice(0, 3);
+    .sort((a, b) => a.val - b.val);
 
   const rankedCPA = d.data
     .filter(s => s.sold > 0 && s.monthly > 0)
     .map(s => { const r = metricsRow(s.monthly * d.months, s.good, s.sold, t); return { name: s.name, val: r.cpa!, cls: r.cpaCls }; })
-    .sort((a, b) => a.val - b.val)
-    .slice(0, 3);
+    .sort((a, b) => a.val - b.val);
 
   const takeaways = generateTakeaways(d, showSold);
+
+  function startDownload() {
+    const parts = ['TPLA Report', d.meta.deal, d.meta.timeframe].filter(Boolean);
+    setDlFilename(parts.join(' - '));
+    setShowDlPrompt(true);
+  }
+
+  function doDownload() {
+    if (!reportRef.current) return;
+    const clone = reportRef.current.cloneNode(true) as HTMLElement;
+    clone.querySelector('.report-controls')?.remove();
+    clone.querySelector('.dl-prompt')?.remove();
+    const styles = Array.from(document.querySelectorAll('style')).map(s => s.textContent ?? '').join('\n');
+    const safeTitle = (dlFilename || 'TPLA Report').replace(/[<>&"]/g, c =>
+      c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : '&quot;'
+    );
+    const html = [
+      '<!DOCTYPE html>',
+      '<html lang="en">',
+      '<head>',
+      '<meta charset="UTF-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+      `<title>${safeTitle}</title>`,
+      '<link rel="preconnect" href="https://fonts.googleapis.com">',
+      '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">',
+      '<style>',
+      styles,
+      '.panel{display:block!important;animation:none!important;}',
+      '.tabs,.report-controls,.dl-prompt{display:none!important;}',
+      'body{background:var(--paper);}',
+      '.panel+.panel{border-top:2px solid var(--line);margin-top:32px;padding-top:24px;}',
+      '</style>',
+      '</head>',
+      '<body>',
+      '<div class="wrap">',
+      '<div class="mast"><span class="gauge"></span><h1>Third Party Lead Source Report</h1></div>',
+      clone.outerHTML,
+      '</div>',
+      '</body>',
+      '</html>',
+    ].join('\n');
+    const safe = (dlFilename || 'TPLA-Report').replace(/[^a-z0-9\-_ .]/gi, '_');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safe}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setShowDlPrompt(false);
+  }
 
   const H = (c: string) => (showSold ? c : c + ' hidden');
 
   return (
-    <div className={showSold ? '' : 'hide-sold'}>
+    <div ref={reportRef} className={showSold ? '' : 'hide-sold'}>
 
       {/* Controls bar — top, above all data */}
       <div className="report-controls">
@@ -209,9 +354,9 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} />
           <span className="track" />Show sold data
         </label>
-        <GeneratePresentationButton data={d} showSold={showSold} />
+        <button className="btn btn-ghost" onClick={startDownload}>Download Report HTML</button>
         <button className="btn btn-ghost" onClick={() => window.print()}>Save as PDF</button>
-        <button className="btn btn-ghost" onClick={onEdit}>Edit inputs</button>
+        <button className="btn btn-ghost" onClick={() => onEdit(d)}>Edit inputs</button>
         {session?.user && (
           <span className="user-chip">
             {session.user.email}
@@ -219,6 +364,23 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           </span>
         )}
       </div>
+
+      {/* Download filename prompt */}
+      {showDlPrompt && (
+        <div className="dl-prompt">
+          <span className="dl-prompt-label">File name</span>
+          <input
+            type="text"
+            className="dl-filename-input"
+            value={dlFilename}
+            onChange={e => setDlFilename(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') doDownload(); if (e.key === 'Escape') setShowDlPrompt(false); }}
+            autoFocus
+          />
+          <button className="btn btn-primary" onClick={doDownload}>Download</button>
+          <button className="btn btn-ghost" onClick={() => setShowDlPrompt(false)}>Cancel</button>
+        </div>
+      )}
 
       {/* Report header — title and meta only */}
       <div className="report-header">
@@ -262,14 +424,14 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           {/* Rankings */}
           {(rankedCPL.length > 0 || (showSold && rankedCPA.length > 0)) && (
             <>
-              <div className="sec-label"><h3>Rankings</h3><span className="note">Best performing configured platforms this period</span></div>
+              <div className="sec-label"><h3>Rankings</h3><span className="note">All configured platforms ranked by efficiency</span></div>
               <div className="rankings-grid">
                 {rankedCPL.length > 0 && (
                   <div className="rank-card card">
                     <div className="rank-card-head">Lowest Cost / Good Lead</div>
                     {rankedCPL.map((item, i) => (
                       <div key={item.name} className="rank-item">
-                        <span className={`rank-pos rank-pos-${i + 1}`}>{i + 1}</span>
+                        <span className={`rank-pos rank-pos-${i < 3 ? i + 1 : 'rest'}`}>{i + 1}</span>
                         <span className="rank-name">{item.name}</span>
                         <span className={`rank-val${item.cls ? ' cpa-' + item.cls : ''}`}>{fmt$(item.val, 2)}</span>
                       </div>
@@ -281,7 +443,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                     <div className="rank-card-head">Lowest Cost / Sold Unit</div>
                     {rankedCPA.map((item, i) => (
                       <div key={item.name} className="rank-item">
-                        <span className={`rank-pos rank-pos-${i + 1}`}>{i + 1}</span>
+                        <span className={`rank-pos rank-pos-${i < 3 ? i + 1 : 'rest'}`}>{i + 1}</span>
                         <span className="rank-name">{item.name}</span>
                         <span className={`rank-val${item.cls ? ' cpa-' + item.cls : ''}`}>{fmt$(item.val)}</span>
                       </div>
@@ -346,15 +508,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           {takeaways.length > 0 && (
             <>
               <div className="sec-label"><h3>Key Takeaways</h3><span className="note">Data-driven recommendations for the dealership GM</span></div>
-              <div className="takeaways-grid">
-                {takeaways.map((tw, i) => (
-                  <div key={i} className={`takeaway-item tway-${tw.type}`}>
-                    <span className="tway-badge">{tw.type === 'scale' ? 'Scale' : tw.type === 'cut' ? 'Reduce' : tw.type === 'watch' ? 'Watch' : 'Note'}</span>
-                    <div className="tway-headline">{tw.headline}</div>
-                    <div className="tway-detail">{tw.detail}</div>
-                  </div>
-                ))}
-              </div>
+              <TakeawayCards takeaways={takeaways} />
             </>
           )}
 
@@ -415,22 +569,32 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       )}
 
       {/* ── PER PLATFORM ── */}
-      {d.data.map((s, i) => tab === 'p' + i && (
-        <div className="panel active" key={i}>
-          <div className="panel-head">
-            <div className="h">{s.name}</div>
-            <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
+      {d.data.map((s, i) => {
+        if (tab !== 'p' + i) return null;
+        const ptw = generatePlatformTakeaways(s, d, showSold);
+        return (
+          <div className="panel active" key={i}>
+            <div className="panel-head">
+              <div className="h">{s.name}</div>
+              <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
+            </div>
+            {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+            <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
+            {showSold && <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+            {ptw.length > 0 && (
+              <>
+                <div className="sec-label"><h3>Key Takeaways</h3><span className="note">{s.name} analysis</span></div>
+                <TakeawayCards takeaways={ptw} />
+              </>
+            )}
+            <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
+            <div className="card">
+              <Chart d={d} bm={s.bm} showSold={showSold} />
+              <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
+            </div>
           </div>
-          {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
-          <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
-          {showSold && <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
-          <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
-          <div className="card">
-            <Chart d={d} bm={s.bm} showSold={showSold} />
-            <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

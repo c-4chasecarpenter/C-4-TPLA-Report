@@ -7,14 +7,16 @@ import { fmt$ } from '@/lib/format';
 
 const SEED = ['CarGurus', 'Autotrader', 'Cars.com', 'Carfax'];
 
-export default function SetupForm({ onGenerate }: { onGenerate: (r: ReportData) => void }) {
-  const [deal, setDeal] = useState('');
-  const [timeframe, setTimeframe] = useState('');
-  const [description, setDescription] = useState('');
-  const [sources, setSources] = useState<SourceEntry[]>(SEED.map((name) => ({ name, monthly: 0 })));
-  const [thr, setThr] = useState<Thresholds>(DEFAULT_THRESHOLDS);
+export default function SetupForm({ onGenerate, initialData }: { onGenerate: (r: ReportData) => void; initialData?: ReportData | null }) {
+  const [deal, setDeal] = useState(initialData?.meta.deal ?? '');
+  const [timeframe, setTimeframe] = useState(initialData?.meta.timeframe ?? '');
+  const [description, setDescription] = useState(initialData?.meta.description ?? '');
+  const [sources, setSources] = useState<SourceEntry[]>(
+    initialData?.data.map(s => ({ name: s.name, monthly: s.monthly })) ?? SEED.map((name) => ({ name, monthly: 0 }))
+  );
+  const [thr, setThr] = useState<Thresholds>(initialData?.t ?? DEFAULT_THRESHOLDS);
   const [files, setFiles] = useState<ParseResult[]>([]);
-  const [months, setMonths] = useState<number>(1);
+  const [months, setMonths] = useState<number>(initialData?.months ?? 1);
   const [detected, setDetected] = useState<number | null>(null);
   const [err, setErr] = useState('');
 
@@ -117,7 +119,7 @@ export default function SetupForm({ onGenerate }: { onGenerate: (r: ReportData) 
   return (
     <>
       <div className="card">
-        <div className="card-head"><span className="eyebrow">Report details</span><span className="step">Step 1 of 4</span></div>
+        <div className="card-head"><span className="eyebrow">Report details</span><span className="step">Step 1 of 3</span></div>
         <div className="card-pad">
           <div className="grid grid-2">
             <div><label>Dealership name</label><input type="text" value={deal} onChange={(e) => setDeal(e.target.value)} placeholder="e.g. Burien Chevrolet" /></div>
@@ -152,6 +154,12 @@ export default function SetupForm({ onGenerate }: { onGenerate: (r: ReportData) 
       <div className="card">
         <div className="card-head"><span className="eyebrow">CRM export</span><span className="step">Step 3 of 3</span></div>
         <div className="card-pad">
+
+          {initialData && files.length === 0 && (
+            <div className="auto-note" style={{ marginBottom: 14, padding: '10px 14px', background: 'var(--cpa-ok-bg)', border: '1px solid #EAD7AE', borderRadius: 9, color: '#8A5D14' }}>
+              Your report details have been restored. Re-upload your CRM export to regenerate the report.
+            </div>
+          )}
 
           {/* Loaded file list */}
           {files.length > 0 && (
