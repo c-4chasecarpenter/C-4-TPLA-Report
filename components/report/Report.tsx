@@ -1,0 +1,446 @@
+'use client';
+import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { ReportData } from '@/lib/types';
+import { fmt$, pct, metricsRow } from '@/lib/format';
+import { Tiles, Verdict, MonthlyTable, Chart } from './parts';
+import ProjectionSlider from './ProjectionSlider';
+import GeneratePresentationButton from '../GeneratePresentationButton';
+
+// ---- Key takeaways ----
+type Takeaway = { type: 'scale' | 'cut' | 'watch' | 'info'; headline: string; detail: string };
+
+function generateTakeaways(d: ReportData, showSold: boolean): Takeaway[] {
+  const items: Takeaway[] = [];
+  const hasSold = d.data.some(s => s.sold > 0);
+
+  for (const s of d.data) {
+    if (s.monthly === 0) continue;
+    const ps = s.monthly * d.months;
+    const r = metricsRow(ps, s.good, s.sold, d.t);
+
+    if (s.good === 0) {
+      items.push({
+        type: 'watch',
+        headline: `${s.name}: No leads tracked this period`,
+        detail: `No leads were recorded from ${s.name}. Verify CRM source mapping or confirm the platform was active during this period.`,
+      });
+    } else if (showSold && hasSold && s.sold === 0) {
+      items.push({
+        type: 'watch',
+        headline: `${s.name}: Leads with no closed deals`,
+        detail: `${s.good.toLocaleString()} leads came in from ${s.name} but zero sold units are logged. Either deals aren't closing or they aren't being tracked back to this source — confirm with the sales manager.`,
+      });
+    } else if (showSold && r.cpaCls === 'bad') {
+      items.push({
+        type: 'cut',
+        headline: `${s.name}: Consider reducing or cutting spend`,
+        detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend reducing budget or renegotiating the contract before the next cycle.`,
+      });
+    } else if (r.cplCls === 'bad' && (!showSold || !hasSold || r.cpaCls !== 'good')) {
+      items.push({
+        type: 'watch',
+        headline: `${s.name}: Lead cost is high`,
+        detail: `Cost per good lead is ${fmt$(r.cpl!, 2)} — above the red threshold. The source is generating activity, but at an inefficient rate. Monitor and consider reducing spend.`,
+      });
+    } else if (showSold && r.cpaCls === 'good') {
+      items.push({
+        type: 'scale',
+        headline: `${s.name}: Top performer — scale this investment`,
+        detail: `Closing at ${pct(r.close)} with a ${fmt$(r.cpa!)}/sale cost — solidly in the green. This is your best performing platform. Consider increasing budget or requesting more listing placements.`,
+      });
+    }
+  }
+
+  if (d.unmatchedSources.length > 0) {
+    const top = d.unmatchedSources[0];
+    items.push({
+      type: 'info',
+      headline: `${d.unmatchedSources.length} source${d.unmatchedSources.length > 1 ? 's' : ''} in your CRM data have no budget assigned`,
+      detail: `Largest untracked source: "${top.source}" with ${top.leads.toLocaleString()} good leads${top.sold > 0 ? ` and ${top.sold} sold units` : ''}. If the dealer is paying for these platforms, add them to get a complete picture.`,
+    });
+  }
+
+  const cr = metricsRow(d.combPeriodSpend, d.comb.good, d.comb.sold, d.t);
+  if (d.data.some(s => s.monthly > 0)) {
+    if (showSold && cr.cpaCls === 'good') {
+      items.unshift({
+        type: 'scale',
+        headline: 'Overall: Digital spend is healthy',
+        detail: `Blended cost per sale of ${fmt$(cr.cpa!)} across all platforms is in the green at a ${pct(cr.close)} close rate. Total investment of ${fmt$(d.combPeriodSpend)} this period is working.`,
+      });
+    } else if (showSold && cr.cpaCls === 'bad') {
+      items.unshift({
+        type: 'cut',
+        headline: 'Overall: Blended spend is underperforming',
+        detail: `Combined cost per sale of ${fmt$(cr.cpa!)} is above your red threshold. Shift budget away from the weakest platforms and concentrate spend on the top performers.`,
+      });
+    }
+  }
+
+  return items;
+}
+
+// ---- Platform horizontal bar charts ----
+function PlatformBars({ d, showSold }: { d: ReportData; showSold: boolean }) {
+  const t = d.t;
+  const hasSoldData = showSold && d.data.some(s => s.sold > 0);
+
+  const leadData = [...d.data].filter(s => s.good > 0).sort((a, b) => b.good - a.good);
+  const maxLeads = Math.max(...leadData.map(s => s.good), 1);
+
+  const cplData = d.data
+    .filter(s => s.good > 0 && s.monthly > 0)
+    .map(s => {
+      const ps = s.monthly * d.months;
+      const r = metricsRow(ps, s.good, s.sold, t);
+      return { name: s.name, val: r.cpl!, cls: r.cplCls };
+    })
+    .sort((a, b) => a.val - b.val);
+  const maxCPL = Math.max(...cplData.map(s => s.val), 1);
+
+  const cpaData = hasSoldData
+    ? d.data
+        .filter(s => s.sold > 0 && s.monthly > 0)
+        .map(s => {
+          const ps = s.monthly * d.months;
+          const r = metricsRow(ps, s.good, s.sold, t);
+          return { name: s.name, val: r.cpa!, cls: r.cpaCls };
+        })
+        .sort((a, b) => a.val - b.val)
+    : [];
+  const maxCPA = cpaData.length ? Math.max(...cpaData.map(s => s.val), 1) : 1;
+
+  const colCount = [leadData.length > 0, cplData.length > 0, hasSoldData && cpaData.length > 0].filter(Boolean).length;
+
+  if (!colCount) return null;
+
+  return (
+    <div className="card card-pad">
+      <div className={`pbars-grid pbars-col-${colCount}`}>
+        {leadData.length > 0 && (
+          <div className="pbar-group">
+            <div className="pbar-gtitle">Good leads by platform</div>
+            {leadData.map(s => (
+              <div key={s.name} className="pbar-row">
+                <div className="pbar-name">{s.name}</div>
+                <div className="pbar-track">
+                  <div className="pbar-fill pbar-neutral" style={{ width: `${(s.good / maxLeads) * 100}%` }} />
+                </div>
+                <div className="pbar-num">{s.good.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {cplData.length > 0 && (
+          <div className="pbar-group">
+            <div className="pbar-gtitle">Cost per good lead <span className="pbar-hint">sorted best first</span></div>
+            {cplData.map(s => (
+              <div key={s.name} className="pbar-row">
+                <div className="pbar-name">{s.name}</div>
+                <div className="pbar-track">
+                  <div className={`pbar-fill pbar-${s.cls || 'neutral'}`} style={{ width: `${(s.val / maxCPL) * 100}%` }} />
+                </div>
+                <div className={`pbar-num${s.cls ? ' cpa-' + s.cls : ''}`}>{fmt$(s.val, 2)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {hasSoldData && cpaData.length > 0 && (
+          <div className="pbar-group">
+            <div className="pbar-gtitle">Cost per sold unit <span className="pbar-hint">sorted best first</span></div>
+            {cpaData.map(s => (
+              <div key={s.name} className="pbar-row">
+                <div className="pbar-name">{s.name}</div>
+                <div className="pbar-track">
+                  <div className={`pbar-fill pbar-${s.cls || 'neutral'}`} style={{ width: `${(s.val / maxCPA) * 100}%` }} />
+                </div>
+                <div className={`pbar-num${s.cls ? ' cpa-' + s.cls : ''}`}>{fmt$(s.val)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---- Main report ----
+export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: () => void }) {
+  const t = d.t;
+  const [tab, setTab] = useState('overview');
+  const [showSold, setShowSold] = useState(true);
+  const { data: session } = useSession();
+
+  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const cr = metricsRow(d.combPeriodSpend, d.comb.good, d.comb.sold, t);
+
+  let bestCpl: string | null = null, bcpl = Infinity, bestCpa: string | null = null, bcpa = Infinity;
+  d.data.forEach(s => {
+    const ps = s.monthly * d.months;
+    if (s.good > 0) { const c = ps / s.good; if (c < bcpl) { bcpl = c; bestCpl = s.name; } }
+    if (s.sold > 0) { const c = ps / s.sold; if (c < bcpa) { bcpa = c; bestCpa = s.name; } }
+  });
+
+  const rankedCPL = d.data
+    .filter(s => s.good > 0 && s.monthly > 0)
+    .map(s => { const r = metricsRow(s.monthly * d.months, s.good, s.sold, t); return { name: s.name, val: r.cpl!, cls: r.cplCls }; })
+    .sort((a, b) => a.val - b.val)
+    .slice(0, 3);
+
+  const rankedCPA = d.data
+    .filter(s => s.sold > 0 && s.monthly > 0)
+    .map(s => { const r = metricsRow(s.monthly * d.months, s.good, s.sold, t); return { name: s.name, val: r.cpa!, cls: r.cpaCls }; })
+    .sort((a, b) => a.val - b.val)
+    .slice(0, 3);
+
+  const takeaways = generateTakeaways(d, showSold);
+
+  const H = (c: string) => (showSold ? c : c + ' hidden');
+
+  return (
+    <div className={showSold ? '' : 'hide-sold'}>
+
+      {/* Controls bar — top, above all data */}
+      <div className="report-controls">
+        <label className="switch">
+          <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} />
+          <span className="track" />Show sold data
+        </label>
+        <GeneratePresentationButton data={d} showSold={showSold} />
+        <button className="btn btn-ghost" onClick={() => window.print()}>Save as PDF</button>
+        <button className="btn btn-ghost" onClick={onEdit}>Edit inputs</button>
+        {session?.user && (
+          <span className="user-chip">
+            {session.user.email}
+            <button onClick={() => signOut()}>Sign out</button>
+          </span>
+        )}
+      </div>
+
+      {/* Report header — title and meta only */}
+      <div className="report-header">
+        <div className="eyebrow">Third Party Lead Source Report</div>
+        <div className="report-title">{d.meta.deal || 'Dealership'}</div>
+        <div className="report-meta">
+          {d.meta.timeframe ? d.meta.timeframe + ' · ' : ''}
+          {d.months} month{d.months > 1 ? 's' : ''} of data · generated {today}
+        </div>
+        {d.meta.description && <div className="report-desc">{d.meta.description}</div>}
+      </div>
+
+      {/* Platform tabs */}
+      <div className="tabs">
+        <button className={'tab' + (tab === 'overview' ? ' active' : '')} onClick={() => setTab('overview')}>Overview</button>
+        {d.data.map((s, i) => {
+          const ps = s.monthly * d.months;
+          const r = metricsRow(ps, s.good, s.sold, t);
+          return (
+            <button key={i} className={'tab' + (tab === 'p' + i ? ' active' : '')} onClick={() => setTab('p' + i)}>
+              <span className={'dot ' + (r.cpaCls && 'cpa-' + r.cpaCls)} />{s.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── OVERVIEW ── */}
+      {tab === 'overview' && (
+        <div className="panel active">
+
+          {/* KPI tiles */}
+          <div className="kpis">
+            <Kpi label="Tracked spend" val={fmt$(d.combPeriodSpend)} foot={`${d.data.length} platform${d.data.length > 1 ? 's' : ''} · ${d.months}mo`} />
+            <Kpi label="Good leads" val={d.comb.good.toLocaleString()} foot={`${d.comb.leads.toLocaleString()} total leads`} />
+            <Kpi label="Cost / good lead" val={cr.cpl === null ? '—' : fmt$(cr.cpl, 2)} foot="blended" cls={cr.cplCls} />
+            <Kpi label="Vehicles sold" val={d.comb.sold.toLocaleString()} foot="all platforms" sold={!showSold} />
+            <Kpi label="Cost / sold" val={cr.cpa === null ? '—' : fmt$(cr.cpa)} foot="blended" cls={cr.cpaCls} sold={!showSold} />
+            <Kpi label="Closing rate" val={cr.close === null ? '—' : pct(cr.close)} foot="sold of good leads" cls={cr.closeCls} sold={!showSold} />
+          </div>
+
+          {/* Rankings */}
+          {(rankedCPL.length > 0 || (showSold && rankedCPA.length > 0)) && (
+            <>
+              <div className="sec-label"><h3>Rankings</h3><span className="note">Best performing configured platforms this period</span></div>
+              <div className="rankings-grid">
+                {rankedCPL.length > 0 && (
+                  <div className="rank-card card">
+                    <div className="rank-card-head">Lowest Cost / Good Lead</div>
+                    {rankedCPL.map((item, i) => (
+                      <div key={item.name} className="rank-item">
+                        <span className={`rank-pos rank-pos-${i + 1}`}>{i + 1}</span>
+                        <span className="rank-name">{item.name}</span>
+                        <span className={`rank-val${item.cls ? ' cpa-' + item.cls : ''}`}>{fmt$(item.val, 2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {showSold && rankedCPA.length > 0 && (
+                  <div className="rank-card card">
+                    <div className="rank-card-head">Lowest Cost / Sold Unit</div>
+                    {rankedCPA.map((item, i) => (
+                      <div key={item.name} className="rank-item">
+                        <span className={`rank-pos rank-pos-${i + 1}`}>{i + 1}</span>
+                        <span className="rank-name">{item.name}</span>
+                        <span className={`rank-val${item.cls ? ' cpa-' + item.cls : ''}`}>{fmt$(item.val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Platform comparison table */}
+          <div className="sec-label"><h3>Platform comparison</h3><span className="note">Click any row to open that platform's detail view</span></div>
+          <div className="card">
+            <table className="cmp">
+              <thead>
+                <tr>
+                  <th className="l">Platform</th>
+                  <th>Spend</th>
+                  <th>Good leads</th>
+                  <th>Cost / good lead</th>
+                  <th className={showSold ? '' : 'hidden'}>Sold</th>
+                  <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
+                  <th className={showSold ? '' : 'hidden'}>Closing rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.data.map((s, i) => {
+                  const ps = s.monthly * d.months;
+                  const r = metricsRow(ps, s.good, s.sold, t);
+                  const winCpl = s.name === bestCpl, winCpa = s.name === bestCpa;
+                  return (
+                    <tr key={i} className={winCpl ? 'winrow' : ''} onClick={() => setTab('p' + i)}>
+                      <td className="l">
+                        <div className="name-cell">
+                          <span className="swatch" />
+                          <b>{s.name}</b>
+                          {winCpl && <span className="wintag">best cost / lead</span>}
+                          <span className="go">view ›</span>
+                        </div>
+                      </td>
+                      <td>{fmt$(ps)}</td>
+                      <td>{s.good.toLocaleString()}</td>
+                      <td className={r.cplCls && 'cpa-' + r.cplCls}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
+                      <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
+                      <td className={H(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}{winCpa && <span className="wintag">best</span>}</td>
+                      <td className={H(r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '—' : pct(r.close)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Performance at a glance — bar charts */}
+          <div className="sec-label"><h3>Performance at a glance</h3><span className="note">Visual comparison across all configured platforms</span></div>
+          <PlatformBars d={d} showSold={showSold} />
+
+          {/* Projection slider */}
+          {showSold && <ProjectionSlider spend={d.combPeriodSpend} good={d.comb.good} sold={d.comb.sold} t={t} label="all platforms blended" />}
+
+          {/* Key Takeaways */}
+          {takeaways.length > 0 && (
+            <>
+              <div className="sec-label"><h3>Key Takeaways</h3><span className="note">Data-driven recommendations for the dealership GM</span></div>
+              <div className="takeaways-grid">
+                {takeaways.map((tw, i) => (
+                  <div key={i} className={`takeaway-item tway-${tw.type}`}>
+                    <span className="tway-badge">{tw.type === 'scale' ? 'Scale' : tw.type === 'cut' ? 'Reduce' : tw.type === 'watch' ? 'Watch' : 'Note'}</span>
+                    <div className="tway-headline">{tw.headline}</div>
+                    <div className="tway-detail">{tw.detail}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* All Data Sources (unmatched) */}
+          {d.unmatchedSources.length > 0 && (
+            <div className="unmatched-block">
+              <div className="sec-label">
+                <h3>All Data Sources</h3>
+                <span className="note">Sources present in your CRM data not configured in the budget above — no spend tracked, cost metrics unavailable</span>
+              </div>
+              <div className="card">
+                <table className="cmp">
+                  <thead>
+                    <tr>
+                      <th className="l">Source name (as it appears in CRM)</th>
+                      <th>Spend</th>
+                      <th>Good leads</th>
+                      <th>Cost / good lead</th>
+                      <th className={showSold ? '' : 'hidden'}>Sold</th>
+                      <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
+                      <th className={showSold ? '' : 'hidden'}>Closing rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.unmatchedSources.map(s => {
+                      const close = s.leads > 0 ? (s.sold / s.leads) * 100 : null;
+                      const closeCls = close === null ? '' : close > d.t.close.good ? 'good' : close < d.t.close.bad ? 'bad' : 'ok';
+                      return (
+                        <tr key={s.source} className="unmatched-row">
+                          <td className="l">
+                            <div className="name-cell">
+                              <span className="swatch" />
+                              <b>{s.source}</b>
+                            </div>
+                          </td>
+                          <td className="muted">—</td>
+                          <td>{s.leads.toLocaleString()}</td>
+                          <td className="muted">—</td>
+                          <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
+                          <td className={showSold ? 'muted' : 'hidden'}>—</td>
+                          <td className={H(closeCls && 'cpa-' + closeCls)}>{close === null ? '—' : pct(close)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Monthly breakdown */}
+          <div className="sec-label"><h3>All platforms by month</h3><span className="note">Good leads and sold across every configured platform combined</span></div>
+          <div className="card">
+            <Chart d={d} bm={d.comb.bm} showSold={showSold} />
+            <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
+          </div>
+        </div>
+      )}
+
+      {/* ── PER PLATFORM ── */}
+      {d.data.map((s, i) => tab === 'p' + i && (
+        <div className="panel active" key={i}>
+          <div className="panel-head">
+            <div className="h">{s.name}</div>
+            <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
+          </div>
+          {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+          <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
+          {showSold && <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+          <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
+          <div className="card">
+            <Chart d={d} bm={s.bm} showSold={showSold} />
+            <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Kpi({ label, val, foot, cls, sold }: { label: string; val: string; foot: string; cls?: string; sold?: boolean }) {
+  return (
+    <div className={'kpi' + (sold ? ' hidden' : '')}>
+      <div className="k-label">{label}</div>
+      <div className={'k-val ' + (cls ? 'cpa-' + cls : '')}>{val}</div>
+      <div className="k-foot">{foot}</div>
+    </div>
+  );
+}
