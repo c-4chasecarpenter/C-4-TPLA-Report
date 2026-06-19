@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { ReportData, PlatformAgg } from '@/lib/types';
+import { ReportData, PlatformAgg, Thresholds } from '@/lib/types';
 import { fmt$, pct, metricsRow } from '@/lib/format';
 import { Tiles, Verdict, MonthlyTable, Chart } from './parts';
 import ProjectionSlider from './ProjectionSlider';
@@ -362,6 +362,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
   const [showSold, setShowSold] = useState(true);
   const [showDlPrompt, setShowDlPrompt] = useState(false);
   const [dlFilename, setDlFilename] = useState('');
+  const [dlMode, setDlMode] = useState<'html' | 'pdf'>('html');
+  const [pdfBusy, setPdfBusy] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
 
@@ -387,10 +389,16 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
 
   const takeaways = generateTakeaways(d, showSold);
 
-  function startDownload() {
+  function startDownload(mode: 'html' | 'pdf') {
     const parts = ['TPLA Report', d.meta.deal, d.meta.timeframe].filter(Boolean);
     setDlFilename(parts.join(' - '));
+    setDlMode(mode);
     setShowDlPrompt(true);
+  }
+
+  function confirmDownload() {
+    if (dlMode === 'pdf') doDownloadPdf();
+    else doDownload();
   }
 
   async function doDownload() {
@@ -500,6 +508,58 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     setShowDlPrompt(false);
   }
 
+  // Save as PDF: render the full report (all panels expanded, one tab per page)
+  // straight to a downloaded PDF — no browser print dialog.
+  async function doDownloadPdf() {
+    if (!reportRef.current || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default as any;
+
+      const clone = reportRef.current.cloneNode(true) as HTMLElement;
+      clone.querySelector('.report-controls')?.remove();
+      clone.querySelector('.dl-prompt')?.remove();
+      clone.querySelector('.tabs')?.remove();
+
+      // Expand every panel; start each tab (after the first) on a new page.
+      const panels = Array.from(clone.querySelectorAll<HTMLElement>('.panel'));
+      panels.forEach((p, i) => {
+        p.classList.add('active');
+        p.style.display = 'block';
+        if (i > 0) p.classList.add('pdf-break');
+      });
+
+      // Off-screen container sized to a landscape page so the layout stays readable.
+      const container = document.createElement('div');
+      container.className = 'wrap pdf-export';
+      container.style.cssText = 'width:1120px;background:#fff;position:fixed;left:-10000px;top:0;padding:0;';
+      container.innerHTML =
+        '<div class="mast" style="margin-bottom:20px;padding-bottom:16px;">' +
+        '<img src="/logo-c4.png" alt="C-4 Analytics" class="mast-logo" />' +
+        '<div class="mast-text"><div class="mast-eyebrow">C-4 Analytics</div>' +
+        '<h1>Third Party Lead Source Report</h1></div></div>';
+      container.appendChild(clone);
+      document.body.appendChild(container);
+
+      const safe = (dlFilename || 'TPLA-Report').replace(/[^a-z0-9\-_ .]/gi, '_');
+      try {
+        await html2pdf().set({
+          margin: [8, 8, 8, 8],
+          filename: `${safe}.pdf`,
+          image: { type: 'jpeg', quality: 0.97 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+          pagebreak: { mode: ['css', 'legacy'], before: '.pdf-break' },
+        }).from(container).save();
+      } finally {
+        document.body.removeChild(container);
+      }
+      setShowDlPrompt(false);
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   const H = (c: string) => (showSold ? c : c + ' hidden');
 
   return (
@@ -511,8 +571,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} />
           <span className="track" />Show sold data
         </label>
-        <button className="btn btn-ghost" onClick={startDownload}>Download Report HTML</button>
-        <button className="btn btn-ghost" onClick={() => window.print()}>Save as PDF</button>
+        <button className="btn btn-ghost" onClick={() => startDownload('html')}>Download Report HTML</button>
+        <button className="btn btn-ghost" onClick={() => startDownload('pdf')}>Save as PDF</button>
         <button className="btn btn-ghost" onClick={() => onEdit(d)}>Edit inputs</button>
         {session?.user && (
           <span className="user-chip">
@@ -522,32 +582,37 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         )}
       </div>
 
-      {/* Download filename prompt */}
+      {/* Download filename prompt — shared by HTML and PDF downloads */}
       {showDlPrompt && (
         <div className="dl-prompt">
-          <span className="dl-prompt-label">File name</span>
+          <span className="dl-prompt-label">{dlMode === 'pdf' ? 'PDF file name' : 'HTML file name'}</span>
           <input
             type="text"
             className="dl-filename-input"
             value={dlFilename}
             onChange={e => setDlFilename(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') doDownload(); if (e.key === 'Escape') setShowDlPrompt(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') confirmDownload(); if (e.key === 'Escape') setShowDlPrompt(false); }}
             autoFocus
           />
-          <button className="btn btn-primary" onClick={doDownload}>Download</button>
+          <button className="btn btn-primary" onClick={confirmDownload} disabled={pdfBusy}>
+            {pdfBusy ? 'Generating…' : dlMode === 'pdf' ? 'Download PDF' : 'Download'}
+          </button>
           <button className="btn btn-ghost" onClick={() => setShowDlPrompt(false)}>Cancel</button>
         </div>
       )}
 
-      {/* Report header — title and meta only */}
+      {/* Report header — title/meta on the left, performance key on the right */}
       <div className="report-header">
-        <div className="eyebrow">Third Party Lead Source Report</div>
-        <div className="report-title">{d.meta.deal || 'Dealership'}</div>
-        <div className="report-meta">
-          {d.meta.timeframe ? d.meta.timeframe + ' · ' : ''}
-          {d.months} month{d.months > 1 ? 's' : ''} of data · generated {today}
+        <div className="report-header-main">
+          <div className="eyebrow">Third Party Lead Source Report</div>
+          <div className="report-title">{d.meta.deal || 'Dealership'}</div>
+          <div className="report-meta">
+            {d.meta.timeframe ? d.meta.timeframe + ' · ' : ''}
+            {d.months} month{d.months > 1 ? 's' : ''} of data · generated {today}
+          </div>
+          {d.meta.description && <div className="report-desc">{d.meta.description}</div>}
         </div>
-        {d.meta.description && <div className="report-desc">{d.meta.description}</div>}
+        <BenchmarkKey t={t} showSold={showSold} />
       </div>
 
       {/* Platform tabs */}
@@ -733,6 +798,45 @@ function Kpi({ label, val, foot, cls, sold }: { label: string; val: string; foot
       <div className="k-label">{label}</div>
       <div className={'k-val ' + (cls ? 'cpa-' + cls : '')}>{val}</div>
       <div className="k-foot">{foot}</div>
+    </div>
+  );
+}
+
+// Compact performance-benchmark key shown top-right of the report header.
+function BenchmarkKey({ t, showSold }: { t: Thresholds; showSold: boolean }) {
+  return (
+    <div className="bench-key">
+      <div className="bench-key-title">Performance Benchmarks</div>
+      <table>
+        <thead>
+          <tr>
+            <th className="l">Tier</th>
+            <th>Cost / lead</th>
+            {showSold && <th>Closing</th>}
+            {showSold && <th>Cost / sold</th>}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="l"><span className="tier-dot cpa-good" style={{ background: 'var(--cpa-good)' }} />Good</td>
+            <td className="cpa-good">Under {fmt$(t.cpl.good)}</td>
+            {showSold && <td className="cpa-good">Over {t.close.good}%</td>}
+            {showSold && <td className="cpa-good">Under {fmt$(t.cpa.good)}</td>}
+          </tr>
+          <tr>
+            <td className="l"><span className="tier-dot cpa-ok" style={{ background: 'var(--cpa-ok)' }} />Medium</td>
+            <td className="cpa-ok">{fmt$(t.cpl.good)}–{fmt$(t.cpl.bad)}</td>
+            {showSold && <td className="cpa-ok">{t.close.bad}–{t.close.good}%</td>}
+            {showSold && <td className="cpa-ok">{fmt$(t.cpa.good)}–{fmt$(t.cpa.bad)}</td>}
+          </tr>
+          <tr>
+            <td className="l"><span className="tier-dot cpa-bad" style={{ background: 'var(--cpa-bad)' }} />Bad</td>
+            <td className="cpa-bad">Over {fmt$(t.cpl.bad)}</td>
+            {showSold && <td className="cpa-bad">Under {t.close.bad}%</td>}
+            {showSold && <td className="cpa-bad">Over {fmt$(t.cpa.bad)}</td>}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }

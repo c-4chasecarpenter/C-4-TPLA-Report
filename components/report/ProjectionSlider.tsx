@@ -34,7 +34,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
         <div className="proj-now">
           <div className="pp-lab">Current</div>
           <div className={`pp-rate${rateCls ? ' cpa-' + rateCls : ''}`}>{curRate > 0 ? curRate.toFixed(1) : '0.0'}<span className="u">%</span></div>
-          <div className={'pp-cpa ' + curCls}>{curCpa === null ? 'No sales yet' : fmt$(curCpa) + ' / sale'}</div>
+          <div className={'pp-cpa' + (curCls ? ' cpa-' + curCls : '')}>{curCpa === null ? 'No sales yet' : fmt$(curCpa) + ' / sale'}</div>
           <div className="pp-foot">{sold.toLocaleString()} sold of {good.toLocaleString()} good leads</div>
         </div>
         <div className="proj-arrow">&rarr;</div>
@@ -46,7 +46,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
               style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
             <div className="ticks"><span>1%</span><span>10%</span><span>20%</span><span>35%</span><span>{max}%</span></div>
           </div>
-          <div className={'pp-cpa ' + cls}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>
+          <div className={'pp-cpa' + (cls ? ' cpa-' + cls : '')}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>
           <div className="pp-foot"><span>~{Math.round(sales).toLocaleString()}</span> sales projected<span className={'delta ' + delta.cls}>{delta.text}</span></div>
         </div>
       </div>
