@@ -15,7 +15,13 @@ export default function Home() {
 
   return (
     <div className="wrap">
-      <div className="mast"><span className="gauge" /><h1>Third Party Lead Source Report</h1></div>
+      <div className="mast">
+        <img src="/logo-c4.png" alt="C-4 Analytics" className="mast-logo" />
+        <div className="mast-text">
+          <div className="mast-eyebrow">C-4 Analytics</div>
+          <h1>Third Party Lead Source Report</h1>
+        </div>
+      </div>
       {report
         ? <Report data={report} onEdit={handleEdit} />
         : <SetupForm onGenerate={(r) => { setReport(r); setEditFrom(null); }} initialData={editFrom} />}
