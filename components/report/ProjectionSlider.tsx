@@ -10,7 +10,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
   const curCls = loBetter(curCpa, t.cpa.good, t.cpa.bad);
   const rateCls = hiBetter(curRate > 0 ? curRate : null, t.close.good, t.close.bad);
   const def = curRate > 0 ? Math.round(curRate * 2) / 2 : 10;
-  const max = Math.max(30, Math.ceil(curRate + 5));
+  const max = 50;
 
   const [rate, setRate] = useState(def);
   const sales = good * (rate / 100);
@@ -28,7 +28,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
 
   return (
     <div className="proj">
-      <div className="proj-head"><h4>Cost per sale by closing rate{label ? ' . ' + label : ''}</h4>
+      <div className="proj-head">
         <div className="sub">Spend and leads stay fixed. Drag the slider to see what cost per sale becomes if the store closes these leads at a different rate.</div></div>
       <div className="proj-body">
         <div className="proj-now">
@@ -44,7 +44,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
             <input type="range" className="proj-slider" min={1} max={max} step={0.5} value={rate}
               onChange={(e) => setRate(parseFloat(e.target.value))}
               style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
-            <div className="ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>{max}%</span></div>
+            <div className="ticks"><span>1%</span><span>10%</span><span>20%</span><span>35%</span><span>{max}%</span></div>
           </div>
           <div className={'pp-cpa ' + cls}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>
           <div className="pp-foot"><span>~{Math.round(sales).toLocaleString()}</span> sales projected<span className={'delta ' + delta.cls}>{delta.text}</span></div>

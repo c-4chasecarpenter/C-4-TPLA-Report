@@ -33,20 +33,20 @@ function generateTakeaways(d: ReportData, showSold: boolean): Takeaway[] {
     } else if (showSold && r.cpaCls === 'bad') {
       items.push({
         type: 'cut',
-        headline: `${s.name}: Consider reducing or cutting spend`,
-        detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend reducing budget or renegotiating the contract before the next cycle.`,
+        headline: `${s.name}: Spend efficiency is below threshold`,
+        detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend potentially reducing budget or renegotiating the contract before the next cycle.`,
       });
     } else if (r.cplCls === 'bad' && (!showSold || !hasSold || r.cpaCls !== 'good')) {
       items.push({
         type: 'watch',
         headline: `${s.name}: Lead cost is high`,
-        detail: `Cost per good lead is ${fmt$(r.cpl!, 2)} — above the red threshold. The source is generating activity, but at an inefficient rate. Monitor and consider reducing spend.`,
+        detail: `Cost per good lead is ${fmt$(r.cpl!, 2)} — above the red threshold. The source is generating activity, but at an inefficient rate. Recommend monitoring closely and potentially reducing spend.`,
       });
     } else if (showSold && r.cpaCls === 'good') {
       items.push({
         type: 'scale',
-        headline: `${s.name}: Top performer — scale this investment`,
-        detail: `Closing at ${pct(r.close)} with a ${fmt$(r.cpa!)}/sale cost — solidly in the green. This is your best performing platform. Consider increasing budget or requesting more listing placements.`,
+        headline: `${s.name}: Top performer`,
+        detail: `Closing at ${pct(r.close)} with a ${fmt$(r.cpa!)}/sale cost — solidly in the green. Recommend potentially increasing budget or requesting more listing placements.`,
       });
     }
   }
@@ -72,7 +72,7 @@ function generateTakeaways(d: ReportData, showSold: boolean): Takeaway[] {
       items.unshift({
         type: 'cut',
         headline: 'Overall: Blended spend is underperforming',
-        detail: `Combined cost per sale of ${fmt$(cr.cpa!)} is above your red threshold. Shift budget away from the weakest platforms and concentrate spend on the top performers.`,
+        detail: `Combined cost per sale of ${fmt$(cr.cpa!)} is above your red threshold. Recommend potentially shifting budget away from the weakest platforms and concentrating spend on the top performers.`,
       });
     }
   }
@@ -108,7 +108,7 @@ function generatePlatformTakeaways(s: PlatformAgg, d: ReportData, showSold: bool
     items.push({
       type: 'scale',
       headline: 'Strong cost per good lead',
-      detail: `At ${fmt$(r.cpl!, 2)}/lead, ${s.name} is delivering leads efficiently — well within the green threshold.`,
+      detail: `${s.name} is delivering leads at ${fmt$(r.cpl!, 2)}/lead — well within the green threshold.`,
     });
   } else if (r.cplCls === 'bad') {
     items.push({
@@ -120,7 +120,7 @@ function generatePlatformTakeaways(s: PlatformAgg, d: ReportData, showSold: bool
     items.push({
       type: 'watch',
       headline: 'Cost per lead in the middle range',
-      detail: `At ${fmt$(r.cpl!, 2)}/lead, ${s.name} is in the amber zone. Compare against other platforms to determine if budget could be better allocated elsewhere.`,
+      detail: `At ${fmt$(r.cpl!, 2)}/lead, ${s.name} is in the amber zone. Recommend monitoring and comparing against other platforms to see if budget could be better allocated.`,
     });
   }
 
@@ -135,20 +135,20 @@ function generatePlatformTakeaways(s: PlatformAgg, d: ReportData, showSold: bool
       if (r.cpaCls === 'good') {
         items.push({
           type: 'scale',
-          headline: 'Top performer — scale this investment',
-          detail: `Closing at ${pct(r.close)} with a cost of ${fmt$(r.cpa!)}/sale — solidly in the green. Consider increasing budget or requesting more listing placements from this vendor.`,
+          headline: 'Top performer',
+          detail: `Closing at ${pct(r.close)} with a cost of ${fmt$(r.cpa!)}/sale — solidly in the green. Recommend potentially increasing budget or requesting more listing placements from this vendor.`,
         });
       } else if (r.cpaCls === 'bad') {
         items.push({
           type: 'cut',
-          headline: 'Consider reducing or cutting spend',
-          detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend reducing budget or renegotiating the contract before the next cycle.`,
+          headline: 'Spend efficiency is below threshold',
+          detail: `At ${fmt$(r.cpa!)}/sale with a ${pct(r.close)} close rate, this platform is above the red threshold. Recommend potentially reducing budget or renegotiating the contract before the next cycle.`,
         });
       } else if (r.cpaCls === 'ok') {
         items.push({
           type: 'watch',
           headline: 'Performing in the middle range',
-          detail: `Cost per sale of ${fmt$(r.cpa!)} is in the amber zone with a ${pct(r.close)} close rate. Monitor and look for ways to improve lead nurturing to push this platform into the green.`,
+          detail: `Cost per sale of ${fmt$(r.cpa!)} is in the amber zone with a ${pct(r.close)} close rate. Recommend monitoring and looking for ways to improve lead nurturing to push this platform into the green.`,
         });
       }
     }
@@ -255,6 +255,103 @@ function TakeawayCards({ takeaways }: { takeaways: Takeaway[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// ---- All Data Sources table (editable spend) ----
+function AllDataSourcesTable({ sources, t, showSold }: {
+  sources: ReportData['unmatchedSources'];
+  t: ReportData['t'];
+  showSold: boolean;
+}) {
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'spend' | 'sold'>('all');
+  const [spendMap, setSpendMap] = useState<Record<string, number>>({});
+
+  const H = (c: string) => (showSold ? c : c + ' hidden');
+
+  const filtered = sources
+    .filter(s => !search || s.source.toLowerCase().includes(search.toLowerCase()))
+    .filter(s => {
+      if (filter === 'spend') return (spendMap[s.source] ?? 0) > 0;
+      if (filter === 'sold') return s.sold > 0;
+      return true;
+    });
+
+  return (
+    <>
+      <div className="ads-toolbar">
+        <input
+          type="text"
+          className="ads-search"
+          placeholder="Search sources…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <div className="ads-filter-chips">
+          {(['all', 'spend', 'sold'] as const).map(f => (
+            <button key={f} className={'ads-chip' + (filter === f ? ' active' : '')} onClick={() => setFilter(f)}>
+              {f === 'all' ? 'All' : f === 'spend' ? 'With spend' : 'Has sales'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <table className="cmp">
+          <thead>
+            <tr>
+              <th className="l">Source name (as it appears in CRM)</th>
+              <th>Monthly spend</th>
+              <th>Good leads</th>
+              <th>Cost / good lead</th>
+              <th className={showSold ? '' : 'hidden'}>Sold</th>
+              <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
+              <th className={showSold ? '' : 'hidden'}>Closing rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(s => {
+              const spendVal = spendMap[s.source] ?? 0;
+              const hasCost = spendVal > 0;
+              const r = hasCost ? metricsRow(spendVal, s.leads, s.sold, t) : null;
+              const close = s.leads > 0 ? (s.sold / s.leads) * 100 : null;
+              const closeCls = close === null ? '' : close > t.close.good ? 'good' : close < t.close.bad ? 'bad' : 'ok';
+              return (
+                <tr key={s.source} className="unmatched-row">
+                  <td className="l">
+                    <div className="name-cell">
+                      <span className="swatch" />
+                      <b>{s.source}</b>
+                    </div>
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      className="spend-cell-input"
+                      placeholder="—"
+                      min={0}
+                      value={spendVal > 0 ? spendVal : ''}
+                      onChange={e => {
+                        const v = parseFloat(e.target.value);
+                        setSpendMap(prev => ({ ...prev, [s.source]: isNaN(v) ? 0 : v }));
+                      }}
+                    />
+                  </td>
+                  <td>{s.leads.toLocaleString()}</td>
+                  <td className={r?.cplCls ? 'cpa-' + r.cplCls : 'muted'}>{!r || r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
+                  <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
+                  <td className={H(r?.cpaCls ? 'cpa-' + r.cpaCls : 'muted')}>{!r || r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+                  <td className={H(closeCls ? 'cpa-' + closeCls : '')}>{close === null ? '—' : pct(close)}</td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} className="ads-no-results">No sources match</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -436,8 +533,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       </div>
 
       {/* ── OVERVIEW ── */}
-      {tab === 'overview' && (
-        <div className="panel active">
+      <div className={'panel' + (tab === 'overview' ? ' active' : '')}>
 
           {/* KPI tiles */}
           <div className="kpis">
@@ -530,7 +626,12 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           <PlatformBars d={d} showSold={showSold} />
 
           {/* Projection slider */}
-          {showSold && <ProjectionSlider spend={d.combPeriodSpend} good={d.comb.good} sold={d.comb.sold} t={t} label="all platforms blended" />}
+          {showSold && (
+            <>
+              <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">All platforms blended — drag the slider to model different closing rate outcomes</span></div>
+              <ProjectionSlider spend={d.combPeriodSpend} good={d.comb.good} sold={d.comb.sold} t={t} />
+            </>
+          )}
 
           {/* Key Takeaways */}
           {takeaways.length > 0 && (
@@ -545,45 +646,9 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             <div className="unmatched-block">
               <div className="sec-label">
                 <h3>All Data Sources</h3>
-                <span className="note">Sources present in your CRM data not configured in the budget above — no spend tracked, cost metrics unavailable</span>
+                <span className="note">Sources in your CRM data — enter monthly spend to calculate cost metrics</span>
               </div>
-              <div className="card">
-                <table className="cmp">
-                  <thead>
-                    <tr>
-                      <th className="l">Source name (as it appears in CRM)</th>
-                      <th>Spend</th>
-                      <th>Good leads</th>
-                      <th>Cost / good lead</th>
-                      <th className={showSold ? '' : 'hidden'}>Sold</th>
-                      <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
-                      <th className={showSold ? '' : 'hidden'}>Closing rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.unmatchedSources.map(s => {
-                      const close = s.leads > 0 ? (s.sold / s.leads) * 100 : null;
-                      const closeCls = close === null ? '' : close > d.t.close.good ? 'good' : close < d.t.close.bad ? 'bad' : 'ok';
-                      return (
-                        <tr key={s.source} className="unmatched-row">
-                          <td className="l">
-                            <div className="name-cell">
-                              <span className="swatch" />
-                              <b>{s.source}</b>
-                            </div>
-                          </td>
-                          <td className="muted">—</td>
-                          <td>{s.leads.toLocaleString()}</td>
-                          <td className="muted">—</td>
-                          <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
-                          <td className={showSold ? 'muted' : 'hidden'}>—</td>
-                          <td className={H(closeCls && 'cpa-' + closeCls)}>{close === null ? '—' : pct(close)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <AllDataSourcesTable sources={d.unmatchedSources} t={t} showSold={showSold} />
             </div>
           )}
 
@@ -594,21 +659,24 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
           </div>
         </div>
-      )}
 
       {/* ── PER PLATFORM ── */}
       {d.data.map((s, i) => {
-        if (tab !== 'p' + i) return null;
         const ptw = generatePlatformTakeaways(s, d, showSold);
         return (
-          <div className="panel active" key={i}>
+          <div className={'panel' + (tab === 'p' + i ? ' active' : '')} key={i}>
             <div className="panel-head">
               <div className="h">{s.name}</div>
               <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
             </div>
             {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
             <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
-            {showSold && <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
+            {showSold && (
+              <>
+                <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
+                <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
+              </>
+            )}
             {ptw.length > 0 && (
               <>
                 <div className="sec-label"><h3>Key Takeaways</h3><span className="note">{s.name} analysis</span></div>
