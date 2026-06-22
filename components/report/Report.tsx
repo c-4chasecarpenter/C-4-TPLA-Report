@@ -684,19 +684,66 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       const usableW = pageW - margin * 2;
       const usableH = pageH - margin * 2;
 
+      // Cut a sub-region [sy, sy+sh) of the source canvas onto its own canvas so
+      // each page gets a clean, non-overlapping slice (no duplicated rows).
+      const sliceToImg = (src: HTMLCanvasElement, sy: number, sh: number) => {
+        const c = document.createElement('canvas');
+        c.width = src.width; c.height = sh;
+        const ctx = c.getContext('2d')!;
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, sh);
+        ctx.drawImage(src, 0, sy, src.width, sh, 0, 0, src.width, sh);
+        return c.toDataURL('image/jpeg', 0.95);
+      };
+
+      const imgW = usableW;
       let firstPage = true;
       for (const block of blocks) {
+        const rectBlock = block.getBoundingClientRect();
         const canvas = await html2canvas(block, { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120, logging: false });
-        if (!canvas.width || !canvas.height) continue;
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const imgW = usableW;
-        const imgH = (canvas.height * imgW) / canvas.width;
-        const pageCount = Math.max(1, Math.ceil(imgH / usableH));
-        for (let k = 0; k < pageCount; k++) {
+        const ch = canvas.height;
+        if (!canvas.width || !ch) continue;
+        const pxPerMm = canvas.width / imgW;
+        const pageHeightPx = usableH * pxPerMm;
+        const cssToPx = canvas.width / rectBlock.width;
+
+        // Collect safe break offsets (canvas px) — places the page may split
+        // without cutting through a section's content.
+        const breaks = new Set<number>([0]);
+        const addBreak = (el: Element) => {
+          const top = (el.getBoundingClientRect().top - rectBlock.top) * cssToPx;
+          if (top > 4 && top < ch - 4) breaks.add(top);
+        };
+        // A section header may begin a page (it travels with the content below it).
+        block.querySelectorAll('.sec-label').forEach(addBreak);
+        // Standalone content blocks may begin a page — unless they sit directly
+        // under a section header (don't orphan the header from its content).
+        block.querySelectorAll('.card, .kpis, .tiles, .rankings-grid, .bench-key, .c4-scoreboard, .takeaway, .proj, .unmatched-block, .grid-2, .card > *')
+          .forEach((el) => {
+            const prev = el.previousElementSibling;
+            if (prev && prev.classList?.contains('sec-label')) return;
+            addBreak(el);
+          });
+        // Long tables/lists may break cleanly between rows.
+        block.querySelectorAll('.src-row, .ads-row, table tbody tr').forEach(addBreak);
+        const sorted = Array.from(breaks).sort((a, b) => a - b);
+
+        let startPx = 0;
+        while (startPx < ch - 1) {
+          const limit = startPx + pageHeightPx;
+          let cut = ch;
+          if (limit < ch) {
+            // Largest safe break that fits on this page; hard-cut only if a single
+            // section is taller than a full page.
+            let best = -1;
+            for (const b of sorted) { if (b > startPx + 8 && b <= limit + 0.5) best = b; }
+            cut = best > startPx + 8 ? best : limit;
+          }
+          const sh = Math.min(Math.round(cut - startPx), ch - startPx);
+          if (sh <= 0) break;
           if (!firstPage) pdf.addPage();
           firstPage = false;
-          // Place the full image shifted up one usable-page per slice; jsPDF clips to the page.
-          pdf.addImage(imgData, 'JPEG', margin, margin - k * usableH, imgW, imgH, undefined, 'FAST');
+          pdf.addImage(sliceToImg(canvas, Math.round(startPx), sh), 'JPEG', margin, margin, imgW, sh / pxPerMm, undefined, 'FAST');
+          startPx += sh;
         }
       }
 
