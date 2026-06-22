@@ -808,6 +808,13 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           <div className="sec-label"><h3>Performance at a glance</h3><span className="note">Visual comparison across all configured platforms</span></div>
           <PlatformBars d={d} showSold={showSold} />
 
+          {/* Monthly breakdown */}
+          <div className="sec-label"><h3>All 3rd Parties by Month</h3><span className="note">Good leads and sold across every configured platform combined</span></div>
+          <div className="card">
+            <Chart d={d} bm={d.comb.bm} showSold={showSold} />
+            <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
+          </div>
+
           {/* Projection slider */}
           {showSold && (
             <>
@@ -827,13 +834,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             </div>
           )}
 
-          {/* Monthly breakdown */}
-          <div className="sec-label"><h3>All platforms by month</h3><span className="note">Good leads and sold across every configured platform combined</span></div>
-          <div className="card">
-            <Chart d={d} bm={d.comb.bm} showSold={showSold} />
-            <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
-          </div>
-
           </div>{/* /panel-content */}
           <Rail t={t} showSold={showSold} takeaways={takeaways} note="Data-driven recommendations for the dealership GM" />
         </div>{/* /panel-body */}
@@ -852,17 +852,17 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                 </div>
                 {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
                 <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
+                <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
+                <div className="card">
+                  <Chart d={d} bm={s.bm} showSold={showSold} />
+                  <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
+                </div>
                 {showSold && (
                   <>
                     <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
                     <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
                   </>
                 )}
-                <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
-                <div className="card">
-                  <Chart d={d} bm={s.bm} showSold={showSold} />
-                  <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
-                </div>
               </div>{/* /panel-content */}
               <Rail t={t} showSold={showSold} takeaways={ptw} note={`${s.name} analysis`} />
             </div>{/* /panel-body */}
