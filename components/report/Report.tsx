@@ -652,8 +652,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       {/* Platform tabs */}
       <div className="tabs">
         <button className={'tab' + (tab === 'overview' ? ' active' : '')} onClick={() => setTab('overview')}>Overview</button>
-        <button className={'tab tab-c4' + (tab === 'c4perf' ? ' active' : '')} onClick={() => setTab('c4perf')}><span className="dot dot-c4" />C-4 Performance</button>
-        <button className={'tab tab-c4' + (tab === 'c4cmp' ? ' active' : '')} onClick={() => setTab('c4cmp')}><span className="dot dot-c4" />C-4 vs 3rd Parties</button>
         {d.data.map((s, i) => {
           const ps = s.monthly * d.months;
           const r = metricsRow(ps, s.good, s.sold, t);
@@ -663,6 +661,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             </button>
           );
         })}
+        <button className={'tab tab-c4' + (tab === 'c4perf' ? ' active' : '')} onClick={() => setTab('c4perf')}><span className="dot dot-c4" />C-4 Performance</button>
+        <button className={'tab tab-c4' + (tab === 'c4cmp' ? ' active' : '')} onClick={() => setTab('c4cmp')}><span className="dot dot-c4" />C-4 vs 3rd Parties</button>
       </div>
 
       {/* ── OVERVIEW ── */}
@@ -791,28 +791,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         </div>{/* /panel-body */}
       </div>
 
-      {/* ── C-4 PERFORMANCE ── */}
-      <div className={'panel' + (tab === 'c4perf' ? ' active' : '')}>
-        <div className="panel-body">
-          <div className="panel-content">
-            <C4Performance c4={c4} computed={c4computed} d={d} showSold={showSold}
-              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} onChange={setC4} />
-          </div>{/* /panel-content */}
-          <Rail t={t} showSold={showSold} takeaways={c4recs} note="C-4 performance vs the field" />
-        </div>{/* /panel-body */}
-      </div>
-
-      {/* ── C-4 vs THIRD PARTIES ── */}
-      <div className={'panel' + (tab === 'c4cmp' ? ' active' : '')}>
-        <div className="panel-body">
-          <div className="panel-content">
-            <C4Comparison computed={c4computed} d={d} showSold={showSold}
-              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} />
-          </div>{/* /panel-content */}
-          <Rail t={t} showSold={showSold} takeaways={[]} note="" />
-        </div>{/* /panel-body */}
-      </div>
-
       {/* ── PER PLATFORM ── */}
       {d.data.map((s, i) => {
         const ptw = generatePlatformTakeaways(s, d, showSold);
@@ -843,6 +821,28 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           </div>
         );
       })}
+
+      {/* ── C-4 PERFORMANCE (second to last) ── */}
+      <div className={'panel' + (tab === 'c4perf' ? ' active' : '')}>
+        <div className="panel-body">
+          <div className="panel-content">
+            <C4Performance c4={c4} computed={c4computed} d={d} showSold={showSold}
+              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} onChange={setC4} />
+          </div>{/* /panel-content */}
+          <Rail t={t} showSold={showSold} takeaways={c4recs} note="C-4 performance vs the field" />
+        </div>{/* /panel-body */}
+      </div>
+
+      {/* ── C-4 vs THIRD PARTIES (last) ── */}
+      <div className={'panel' + (tab === 'c4cmp' ? ' active' : '')}>
+        <div className="panel-body">
+          <div className="panel-content">
+            <C4Comparison computed={c4computed} d={d} showSold={showSold}
+              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} />
+          </div>{/* /panel-content */}
+          <Rail t={t} showSold={showSold} takeaways={c4recs} note="C-4 vs third parties" />
+        </div>{/* /panel-body */}
+      </div>
     </div>
   );
 }

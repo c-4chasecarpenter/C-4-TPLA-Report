@@ -896,11 +896,15 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 .c4-src-badge.web { background: var(--orange-tint); color: var(--orange); }
 .c4-src-badge.other { background: var(--line-soft); color: var(--ink-soft); }
 
-/* Wide monthly entry table */
+/* Monthly entry table — sized to fit the panel without horizontal scrolling */
 .c4-mtab-wrap { overflow-x: auto; }
-.c4-mtab { min-width: 720px; }
-.c4-mtab .c4-type-col { white-space: nowrap; }
-.c4-mtab .spend-cell-input { width: 84px; padding: 5px 8px; }
+.c4-mtab { width: 100%; table-layout: fixed; }
+.c4-mtab thead th { white-space: normal; line-height: 1.18; padding: 8px 4px; vertical-align: bottom; font-size: 10px; letter-spacing: .02em; }
+.c4-mtab thead th.l { width: 64px; }
+.c4-mtab tbody td, .c4-mtab tfoot td { padding: 7px 4px; font-size: 12px; }
+.c4-mtab td.l { width: 64px; }
+.c4-mtab .c4-type-col { width: auto; }
+.c4-mtab .spend-cell-input { width: 100%; max-width: 62px; min-width: 40px; padding: 4px 4px; }
 
 /* Scoreboard */
 .c4-scoreboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 6px 0 8px; }
@@ -951,3 +955,27 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 .c4-rr-v { font-size: 15px; color: var(--ink-soft); }
 .c4-rr-v b { color: var(--ink); }
 .c4-rr-foot { font-size: 11.5px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+
+/* Thick rule above summary / total rows in C-4 comparison tables */
+.cmp.cmp-c4 .tot-row td, .cmp.c4-plan .tot-row td { border-top: 2.5px solid var(--ink); font-weight: 800; color: var(--ink); }
+
+/* Grey reference note beside tables */
+.c4-table-note { font-size: 12px; line-height: 1.55; color: var(--muted); margin: 10px 2px 4px; }
+.c4-table-note b { color: var(--ink-soft); }
+
+/* Monthly budget reference block */
+.c4-budget { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 4px 0 6px; }
+.c4-budget-main { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.c4-budget-lab { font-size: 13px; font-weight: 700; color: var(--ink); }
+.c4-budget-lab .hint { font-weight: 400; }
+.c4-budget-val { font-size: 18px; font-weight: 800; color: var(--ink); }
+.c4-budget-input input { width: 110px; }
+.c4-budget-compare { font-size: 12px; color: var(--ink-soft); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+.c4-budget-compare b { color: var(--ink); }
+
+/* Reallocation: add button + plan table */
+.c4-add-btn { align-self: flex-end; white-space: nowrap; }
+.c4-plan-actions { white-space: nowrap; text-align: right; }
+.c4-row-btn { font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-soft); background: transparent; border: 1px solid var(--line); border-radius: 5px; padding: 4px 10px; margin-left: 6px; cursor: pointer; transition: all .15s; }
+.c4-row-btn:hover { border-color: var(--orange); color: var(--orange); }
+.c4-row-btn.del:hover { border-color: var(--cpa-bad); color: var(--cpa-bad); }

@@ -26,6 +26,7 @@ export interface C4MonthData {
 export interface C4Data {
   leadTypes: C4LeadType[];
   months: Record<string, C4MonthData>; // keyed by report month key (ReportData.mkeys)
+  budget: number;                      // monthly budget — reference only, not the true spend
 }
 
 // Anything prefixed `asc_` is a lead from the dealer website.
@@ -46,7 +47,7 @@ export const DEFAULT_C4_LEAD_TYPES: C4LeadType[] = [
 export function emptyC4Data(mkeys: string[]): C4Data {
   const months: Record<string, C4MonthData> = {};
   for (const k of mkeys) months[k] = { spend: 0, leads: {} };
-  return { leadTypes: DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t })), months };
+  return { leadTypes: DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t })), months, budget: 0 };
 }
 
 // Ensure a loaded C4Data covers exactly the report's current month keys.
@@ -54,14 +55,18 @@ export function reconcileC4Months(c4: C4Data, mkeys: string[]): C4Data {
   const months: Record<string, C4MonthData> = {};
   for (const k of mkeys) months[k] = c4.months[k] ?? { spend: 0, leads: {} };
   const leadTypes = c4.leadTypes?.length ? c4.leadTypes : DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t }));
-  return { leadTypes, months };
+  return { leadTypes, months, budget: c4.budget ?? 0 };
 }
 
 // ---- blended CRM close rate (entire report: configured platforms + everything else) ----
-export function crmCloseRate(d: ReportData): number {
+export interface CrmCloseDetail { good: number; sold: number; rate: number; }
+export function crmCloseDetail(d: ReportData): CrmCloseDetail {
   let good = d.comb.good, sold = d.comb.sold;
   for (const u of d.unmatchedSources) { good += u.leads; sold += u.sold; }
-  return good > 0 ? (sold / good) * 100 : 0;
+  return { good, sold, rate: good > 0 ? (sold / good) * 100 : 0 };
+}
+export function crmCloseRate(d: ReportData): number {
+  return crmCloseDetail(d).rate;
 }
 
 // ---- computed C-4 view ----
@@ -166,62 +171,83 @@ export function buildComparison(c4c: C4Computed, d: ReportData): C4Comparison {
   return { c4, rows, thirdBlended, beatsCplCount, beatsCpaCount, cplEdgePct, cpaEdgePct };
 }
 
-// ---- reallocation projector ----
-// Move `amount` of period spend from a chosen third party to C-4. Leads scale at
-// each channel's own cost-per-lead, so the punchline is: the same dollars buy
-// more leads at C-4's (lower) cost per lead.
-export interface ReallocSide { spend: number; leads: number; sold: number; }
-export interface ReallocResult {
-  amount: number;
-  sourceBefore: CompareRow;
-  sourceAfter: ReallocSide;
-  c4Before: CompareRow;
-  c4After: ReallocSide;
-  totalSpend: number;            // unchanged
-  totalLeadsBefore: number;
-  totalLeadsAfter: number;
-  leadDelta: number;
-  totalSoldBefore: number;
-  totalSoldAfter: number;
-  soldDelta: number;
-  combinedCplBefore: number | null;
-  combinedCplAfter: number | null;
-  valid: boolean;                // both channels have a usable cost-per-lead
+// ---- reallocation projector (monthly basis) ----
+// Each allocation moves `monthly` dollars/month from a third party into C-4.
+// Leads scale at each channel's own cost-per-lead, so the same dollars buy more
+// leads at C-4's (lower) cost per lead. Allocations stack into a summary table.
+export interface Allocation { source: string; monthly: number; }
+
+export interface AllocRow {
+  name: string;
+  isC4?: boolean;
+  currentMonthly: number;
+  change: number;          // negative for sources, positive for C-4
+  updatedMonthly: number;
+  leadsBeforeMo: number;
+  leadsAfterMo: number;
+  soldBeforeMo: number;
+  soldAfterMo: number;
 }
 
-export function reallocate(rawAmount: number, source: CompareRow, c4: CompareRow, crmClose: number): ReallocResult {
-  const amount = Math.max(0, Math.min(rawAmount, source.spend));
-  const tpCpl = source.m.cpl;
-  const c4Cpl = c4.m.cpl;
-  const tpCloseFrac = source.leads > 0 ? source.sold / source.leads : 0;
+export interface AllocSummary {
+  sourceRows: AllocRow[];
+  c4Row: AllocRow;
+  totalMovedMonthly: number;
+  netLeadsMo: number;
+  netSoldMo: number;
+  combinedCplBefore: number | null;
+  combinedCplAfter: number | null;
+}
 
-  const sourceSpendAfter = source.spend - amount;
-  const c4SpendAfter = c4.spend + amount;
+export function summarizeAllocations(allocs: Allocation[], cmp: C4Comparison, months: number, crmClose: number): AllocSummary {
+  const m = Math.max(1, months);
+  const c4Cpl = cmp.c4.m.cpl;
+  const c4Monthly = cmp.c4.spend / m;
+  const c4LeadsBeforeMo = c4Cpl ? c4Monthly / c4Cpl : 0;
 
-  const sourceLeadsAfter = tpCpl ? sourceSpendAfter / tpCpl : source.leads;
-  const c4LeadsAfter = c4Cpl ? c4SpendAfter / c4Cpl : c4.leads;
+  let totalMoved = 0;
+  const sourceRows: AllocRow[] = [];
+  for (const a of allocs) {
+    const src = cmp.rows.find((r) => r.name === a.source);
+    if (!src) continue;
+    const curMo = src.spend / m;
+    const moved = Math.max(0, Math.min(a.monthly, curMo));
+    totalMoved += moved;
+    const cpl = src.m.cpl;
+    const closeFrac = src.leads > 0 ? src.sold / src.leads : 0;
+    const leadsBeforeMo = cpl ? curMo / cpl : 0;
+    const updated = curMo - moved;
+    const leadsAfterMo = cpl ? updated / cpl : 0;
+    sourceRows.push({
+      name: src.name, currentMonthly: curMo, change: -moved, updatedMonthly: updated,
+      leadsBeforeMo, leadsAfterMo,
+      soldBeforeMo: leadsBeforeMo * closeFrac, soldAfterMo: leadsAfterMo * closeFrac,
+    });
+  }
 
-  const sourceSoldAfter = sourceLeadsAfter * tpCloseFrac;
-  const c4SoldAfter = (c4LeadsAfter * crmClose) / 100;
+  const c4Updated = c4Monthly + totalMoved;
+  const c4LeadsAfterMo = c4Cpl ? c4Updated / c4Cpl : 0;
+  const c4Row: AllocRow = {
+    name: 'C-4 Analytics', isC4: true,
+    currentMonthly: c4Monthly, change: totalMoved, updatedMonthly: c4Updated,
+    leadsBeforeMo: c4LeadsBeforeMo, leadsAfterMo: c4LeadsAfterMo,
+    soldBeforeMo: (c4LeadsBeforeMo * crmClose) / 100,
+    soldAfterMo: (c4LeadsAfterMo * crmClose) / 100,
+  };
 
-  const totalSpend = source.spend + c4.spend;
-  const totalLeadsBefore = source.leads + c4.leads;
-  const totalLeadsAfter = sourceLeadsAfter + c4LeadsAfter;
-  const totalSoldBefore = source.sold + c4.sold;
-  const totalSoldAfter = sourceSoldAfter + c4SoldAfter;
+  const netLeadsMo = (c4Row.leadsAfterMo - c4Row.leadsBeforeMo)
+    + sourceRows.reduce((s, r) => s + (r.leadsAfterMo - r.leadsBeforeMo), 0);
+  const netSoldMo = (c4Row.soldAfterMo - c4Row.soldBeforeMo)
+    + sourceRows.reduce((s, r) => s + (r.soldAfterMo - r.soldBeforeMo), 0);
+
+  const spend = c4Monthly + sourceRows.reduce((s, r) => s + r.currentMonthly, 0); // conserved
+  const leadsBefore = c4Row.leadsBeforeMo + sourceRows.reduce((s, r) => s + r.leadsBeforeMo, 0);
+  const leadsAfter = c4Row.leadsAfterMo + sourceRows.reduce((s, r) => s + r.leadsAfterMo, 0);
 
   return {
-    amount,
-    sourceBefore: source,
-    sourceAfter: { spend: sourceSpendAfter, leads: sourceLeadsAfter, sold: sourceSoldAfter },
-    c4Before: c4,
-    c4After: { spend: c4SpendAfter, leads: c4LeadsAfter, sold: c4SoldAfter },
-    totalSpend,
-    totalLeadsBefore, totalLeadsAfter, leadDelta: totalLeadsAfter - totalLeadsBefore,
-    totalSoldBefore, totalSoldAfter, soldDelta: totalSoldAfter - totalSoldBefore,
-    combinedCplBefore: totalLeadsBefore > 0 ? totalSpend / totalLeadsBefore : null,
-    combinedCplAfter: totalLeadsAfter > 0 ? totalSpend / totalLeadsAfter : null,
-    valid: !!tpCpl && !!c4Cpl,
+    sourceRows, c4Row, totalMovedMonthly: totalMoved, netLeadsMo, netSoldMo,
+    combinedCplBefore: leadsBefore > 0 ? spend / leadsBefore : null,
+    combinedCplAfter: leadsAfter > 0 ? spend / leadsAfter : null,
   };
 }
 

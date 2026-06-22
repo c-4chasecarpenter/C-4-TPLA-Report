@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { ReportData } from '@/lib/types';
 import { fmt$, pct } from '@/lib/format';
-import { C4Computed, C4Comparison as Cmp, buildComparison, c4Recommendations, reallocate } from '@/lib/c4';
+import { C4Computed, C4Comparison as Cmp, buildComparison, crmCloseDetail, Allocation, summarizeAllocations } from '@/lib/c4';
 import { C4EditBar } from './C4Performance';
 
 export default function C4Comparison({ computed, d, showSold, editMode, onToggle, onSave }: {
@@ -14,8 +14,9 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
   onSave: () => void;
 }) {
   const cmp = buildComparison(computed, d);
-  const recs = c4Recommendations(computed, cmp, d);
+  const close = crmCloseDetail(d);
   const H = (cls: string) => (showSold ? cls : cls + ' hidden');
+  const perMo = (period: number) => period / Math.max(1, d.months);
 
   return (
     <>
@@ -63,11 +64,12 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
           {/* Side-by-side table */}
           <div className="sec-label"><h3>Side by side</h3><span className="note">C-4 against every configured third party (lower cost is better)</span></div>
           <div className="card">
-            <table className="cmp">
+            <table className="cmp cmp-c4">
               <thead>
                 <tr>
                   <th className="l">Channel</th>
-                  <th>Spend</th>
+                  <th>Spend / mo</th>
+                  <th>Spend ({d.months}mo)</th>
                   <th>Leads</th>
                   <th>Cost / lead</th>
                   <th className={showSold ? '' : 'hidden'}>Sold</th>
@@ -76,10 +78,11 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
                 </tr>
               </thead>
               <tbody>
-                <CmpRow row={cmp.c4} showSold={showSold} highlight />
-                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} showSold={showSold} />)}
+                <CmpRow row={cmp.c4} showSold={showSold} perMo={perMo} highlight />
+                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} showSold={showSold} perMo={perMo} />)}
                 <tr className="tot-row">
                   <td className="l">{cmp.thirdBlended.name}</td>
+                  <td>{fmt$(perMo(cmp.thirdBlended.spend))}</td>
                   <td>{fmt$(cmp.thirdBlended.spend)}</td>
                   <td>{cmp.thirdBlended.leads.toLocaleString()}</td>
                   <td className={cmp.thirdBlended.m.cplCls && 'cpa-' + cmp.thirdBlended.m.cplCls}>{cmp.thirdBlended.m.cpl === null ? '—' : fmt$(cmp.thirdBlended.m.cpl, 2)}</td>
@@ -90,26 +93,17 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
               </tbody>
             </table>
           </div>
-
-          {/* Recommendations */}
-          {recs.length > 0 && (
-            <>
-              <div className="sec-label"><h3>Recommendations</h3><span className="note">Where the dealership&apos;s money works hardest</span></div>
-              <div className="takeaways-grid">
-                {recs.map((tw, i) => (
-                  <div key={i} className={`takeaway-item tway-${tw.type}`}>
-                    <span className="tway-badge">{tw.type === 'scale' ? 'Scale' : tw.type === 'cut' ? 'Reallocate' : tw.type === 'watch' ? 'Watch' : 'Note'}</span>
-                    <div className="tway-headline">{tw.headline}</div>
-                    <div className="tway-detail">{tw.detail}</div>
-                  </div>
-                ))}
-              </div>
-            </>
+          {showSold && (
+            <div className="c4-table-note">
+              C-4 closing rate of <b>{pct(close.rate)}</b> is the blended average of <b>every source</b> in the submitted CRM data
+              ({close.sold.toLocaleString()} sold of {close.good.toLocaleString()} leads). C-4 drives traffic but the CRM doesn&apos;t
+              attribute the sale back to us, so this report-wide average is applied to C-4&apos;s leads to project sold units.
+            </div>
           )}
 
           {/* Reallocation projector */}
-          <div className="sec-label"><h3>Reallocation projector</h3><span className="note">Model moving spend from a third party into C-4 campaigns</span></div>
-          <Reallocator cmp={cmp} crmClose={computed.crmClose} showSold={showSold} />
+          <div className="sec-label"><h3>Reallocation projector</h3><span className="note">Model moving monthly spend from a third party into C-4 campaigns</span></div>
+          <Reallocator cmp={cmp} months={d.months} crmClose={close.rate} showSold={showSold} />
         </>
       )}
     </>
@@ -126,7 +120,7 @@ function ScoreCard({ label, big, sub, good }: { label: string; big: string; sub:
   );
 }
 
-function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolean; highlight?: boolean }) {
+function CmpRow({ row, showSold, perMo, highlight }: { row: Cmp['c4']; showSold: boolean; perMo: (n: number) => number; highlight?: boolean }) {
   const H = (cls: string) => (showSold ? cls : cls + ' hidden');
   return (
     <tr className={highlight ? 'c4-row' : ''}>
@@ -137,6 +131,7 @@ function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolea
           {highlight && <span className="wintag">C-4</span>}
         </div>
       </td>
+      <td>{fmt$(perMo(row.spend))}</td>
       <td>{fmt$(row.spend)}</td>
       <td>{Math.round(row.leads).toLocaleString()}</td>
       <td className={row.m.cplCls && 'cpa-' + row.m.cplCls}>{row.m.cpl === null ? '—' : fmt$(row.m.cpl, 2)}</td>
@@ -147,72 +142,139 @@ function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolea
   );
 }
 
-function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; showSold: boolean }) {
+function Reallocator({ cmp, months, crmClose, showSold }: { cmp: Cmp; months: number; crmClose: number; showSold: boolean }) {
   const candidates = cmp.rows.filter((r) => r.spend > 0 && r.m.cpl !== null);
+  const monthlyOf = (r: Cmp['rows'][number]) => r.spend / Math.max(1, months);
+
   const [srcName, setSrcName] = useState(candidates[0]?.name ?? '');
   const source = candidates.find((r) => r.name === srcName) ?? candidates[0];
+  const maxMonthly = source ? Math.round(monthlyOf(source)) : 0;
+  const [amount, setAmount] = useState(maxMonthly ? Math.round(maxMonthly / 2) : 0);
+  const [allocs, setAllocs] = useState<Allocation[]>([]);
 
-  const maxAmount = source ? Math.round(source.spend) : 0;
-  const [amount, setAmount] = useState(maxAmount ? Math.round(maxAmount / 2) : 0);
+  if (!source) return <div className="c4-empty">Add at least one third party with spend and leads to model a reallocation.</div>;
+  if (cmp.c4.m.cpl === null) return <div className="c4-empty">Enter C-4 spend and leads first to model a reallocation.</div>;
 
-  if (!source) {
-    return <div className="c4-empty">Add at least one third party with spend and leads to model a reallocation.</div>;
+  const amt = Math.max(0, Math.min(amount, maxMonthly));
+  const pctv = maxMonthly > 0 ? (amt / maxMonthly) * 100 : 0;
+
+  // Live preview of the single allocation currently dialed in.
+  const preview = summarizeAllocations([{ source: source.name, monthly: amt }], cmp, months, crmClose);
+  const leadUp = preview.netLeadsMo >= 0;
+
+  // Committed allocations.
+  const summary = summarizeAllocations(allocs, cmp, months, crmClose);
+
+  function addAlloc() {
+    if (amt <= 0) return;
+    setAllocs((prev) => {
+      const others = prev.filter((a) => a.source !== source!.name);
+      return [...others, { source: source!.name, monthly: amt }];
+    });
   }
-  if (cmp.c4.m.cpl === null) {
-    return <div className="c4-empty">Enter C-4 spend and leads first to model a reallocation.</div>;
+  function editAlloc(a: Allocation) {
+    setSrcName(a.source);
+    setAmount(a.monthly);
+    setAllocs((prev) => prev.filter((x) => x.source !== a.source));
+  }
+  function deleteAlloc(name: string) {
+    setAllocs((prev) => prev.filter((a) => a.source !== name));
   }
 
-  const amt = Math.max(0, Math.min(amount, maxAmount));
-  const res = reallocate(amt, source, cmp.c4, crmClose);
-  const pctv = maxAmount > 0 ? (amt / maxAmount) * 100 : 0;
-  const leadUp = res.leadDelta >= 0;
+  const existing = allocs.find((a) => a.source === source.name);
 
   return (
-    <div className="card card-pad c4-realloc">
-      <div className="c4-realloc-controls">
-        <div className="c4-realloc-field">
-          <label>Move spend from</label>
-          <select value={srcName} onChange={(e) => { setSrcName(e.target.value); const s = candidates.find((r) => r.name === e.target.value); setAmount(s ? Math.round(s.spend / 2) : 0); }}>
-            {candidates.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
-          </select>
+    <>
+      <div className="card card-pad c4-realloc">
+        <div className="c4-realloc-controls">
+          <div className="c4-realloc-field">
+            <label>Move monthly spend from</label>
+            <select value={srcName} onChange={(e) => { setSrcName(e.target.value); const s = candidates.find((r) => r.name === e.target.value); setAmount(s ? Math.round(monthlyOf(s) / 2) : 0); }}>
+              {candidates.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+            </select>
+          </div>
+          <div className="c4-realloc-field grow">
+            <label>Reallocate <b>{fmt$(amt)}/mo</b> of {fmt$(maxMonthly)}/mo to C-4</label>
+            <input type="range" className="proj-slider" min={0} max={maxMonthly} step={Math.max(1, Math.round(maxMonthly / 100))} value={amt}
+              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+              style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+          </div>
+          <button className="btn btn-primary c4-add-btn" onClick={addAlloc} disabled={amt <= 0}>
+            {existing ? 'Update' : 'Add'} reallocation
+          </button>
         </div>
-        <div className="c4-realloc-field grow">
-          <label>Amount to reallocate to C-4: <b>{fmt$(amt)}</b> of {fmt$(maxAmount)}</label>
-          <input type="range" className="proj-slider" min={0} max={maxAmount} step={Math.max(1, Math.round(maxAmount / 100))} value={amt}
-            onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-            style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+
+        <div className="c4-realloc-result">
+          <div className={'c4-rr-hero ' + (leadUp ? 'is-good' : 'is-bad')}>
+            <span className="c4-rr-num">{leadUp ? '+' : ''}{Math.round(preview.netLeadsMo).toLocaleString()}</span>
+            <span className="c4-rr-lab">net leads / month from moving {fmt$(amt)}/mo out of {source.name}</span>
+          </div>
+          <div className="c4-rr-stats">
+            <div><span className="c4-rr-k">Combined cost / lead</span><span className="c4-rr-v">{preview.combinedCplBefore === null ? '—' : fmt$(preview.combinedCplBefore, 2)} → <b>{preview.combinedCplAfter === null ? '—' : fmt$(preview.combinedCplAfter, 2)}</b></span></div>
+            {showSold && <div><span className="c4-rr-k">Net sold / month</span><span className="c4-rr-v">{preview.netSoldMo >= 0 ? '+' : ''}{preview.netSoldMo.toFixed(1)}</span></div>}
+          </div>
+          <div className="c4-rr-foot">Leads scale at each channel&apos;s current cost per lead; projected sold applies the {pct(crmClose)} blended CRM close rate. A modeled estimate, not a guarantee.</div>
         </div>
       </div>
 
-      <div className="c4-realloc-grid">
-        <ReallocCard title={`${source.name} (reduced)`} side={res.sourceAfter} before={source} showSold={showSold} />
-        <div className="c4-realloc-arrow">&rarr;</div>
-        <ReallocCard title="C-4 Analytics (boosted)" side={res.c4After} before={cmp.c4} showSold={showSold} accent />
-      </div>
-
-      <div className="c4-realloc-result">
-        <div className={'c4-rr-hero ' + (leadUp ? 'is-good' : 'is-bad')}>
-          <span className="c4-rr-num">{leadUp ? '+' : ''}{Math.round(res.leadDelta).toLocaleString()}</span>
-          <span className="c4-rr-lab">net leads on the same {fmt$(res.totalSpend)} total spend</span>
-        </div>
-        <div className="c4-rr-stats">
-          <div><span className="c4-rr-k">Combined cost / lead</span><span className="c4-rr-v">{res.combinedCplBefore === null ? '—' : fmt$(res.combinedCplBefore, 2)} → <b>{res.combinedCplAfter === null ? '—' : fmt$(res.combinedCplAfter, 2)}</b></span></div>
-          {showSold && <div><span className="c4-rr-k">Projected sold</span><span className="c4-rr-v">{Math.round(res.totalSoldBefore).toLocaleString()} → <b>{Math.round(res.totalSoldAfter).toLocaleString()}</b> ({res.soldDelta >= 0 ? '+' : ''}{Math.round(res.soldDelta).toLocaleString()})</span></div>}
-        </div>
-        <div className="c4-rr-foot">Leads scale at each channel&apos;s current cost per lead; projected sold applies the {pct(crmClose)} blended CRM close rate. A modeled estimate, not a guarantee.</div>
-      </div>
-    </div>
-  );
-}
-
-function ReallocCard({ title, side, before, showSold, accent }: { title: string; side: { spend: number; leads: number; sold: number }; before: { spend: number; leads: number; sold: number }; showSold: boolean; accent?: boolean }) {
-  const dLeads = side.leads - before.leads;
-  return (
-    <div className={'c4-realloc-card' + (accent ? ' accent' : '')}>
-      <div className="c4-rc-title">{title}</div>
-      <div className="c4-rc-row"><span>Spend</span><span>{fmt$(before.spend)} → <b>{fmt$(side.spend)}</b></span></div>
-      <div className="c4-rc-row"><span>Leads</span><span>{Math.round(before.leads).toLocaleString()} → <b>{Math.round(side.leads).toLocaleString()}</b> <em className={dLeads >= 0 ? 'up' : 'dn'}>({dLeads >= 0 ? '+' : ''}{Math.round(dLeads).toLocaleString()})</em></span></div>
-      {showSold && <div className="c4-rc-row"><span>Sold</span><span>{Math.round(before.sold).toLocaleString()} → <b>{Math.round(side.sold).toLocaleString()}</b></span></div>}
-    </div>
+      {/* Committed reallocation plan */}
+      {allocs.length > 0 && (
+        <>
+          <div className="sec-label"><h3>Reallocation plan</h3><span className="note">Recommended monthly budget shifts — edit or remove any row</span></div>
+          <div className="card">
+            <table className="cmp c4-plan">
+              <thead>
+                <tr>
+                  <th className="l">Channel</th>
+                  <th>Current / mo</th>
+                  <th>Rec. change</th>
+                  <th>Updated / mo</th>
+                  <th>Leads / mo</th>
+                  {showSold && <th>Sold / mo</th>}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.sourceRows.map((r) => (
+                  <tr key={r.name}>
+                    <td className="l"><b>{r.name}</b></td>
+                    <td>{fmt$(r.currentMonthly)}</td>
+                    <td className="cpa-bad">{fmt$(r.change)}</td>
+                    <td>{fmt$(r.updatedMonthly)}</td>
+                    <td>{Math.round(r.leadsBeforeMo).toLocaleString()} → {Math.round(r.leadsAfterMo).toLocaleString()}</td>
+                    {showSold && <td>{r.soldBeforeMo.toFixed(1)} → {r.soldAfterMo.toFixed(1)}</td>}
+                    <td className="c4-plan-actions">
+                      <button className="c4-row-btn" onClick={() => editAlloc({ source: r.name, monthly: -r.change })} title="Edit">Edit</button>
+                      <button className="c4-row-btn del" onClick={() => deleteAlloc(r.name)} title="Remove">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="c4-row">
+                  <td className="l"><b>{summary.c4Row.name}</b> <span className="wintag">C-4</span></td>
+                  <td>{fmt$(summary.c4Row.currentMonthly)}</td>
+                  <td className="cpa-good">+{fmt$(summary.c4Row.change)}</td>
+                  <td>{fmt$(summary.c4Row.updatedMonthly)}</td>
+                  <td>{Math.round(summary.c4Row.leadsBeforeMo).toLocaleString()} → {Math.round(summary.c4Row.leadsAfterMo).toLocaleString()}</td>
+                  {showSold && <td>{summary.c4Row.soldBeforeMo.toFixed(1)} → {summary.c4Row.soldAfterMo.toFixed(1)}</td>}
+                  <td></td>
+                </tr>
+                <tr className="tot-row">
+                  <td className="l">Net impact</td>
+                  <td>{fmt$(summary.totalMovedMonthly)} moved</td>
+                  <td>—</td>
+                  <td>same total</td>
+                  <td className={summary.netLeadsMo >= 0 ? 'cpa-good' : 'cpa-bad'}>{summary.netLeadsMo >= 0 ? '+' : ''}{Math.round(summary.netLeadsMo).toLocaleString()}/mo</td>
+                  {showSold && <td className={summary.netSoldMo >= 0 ? 'cpa-good' : 'cpa-bad'}>{summary.netSoldMo >= 0 ? '+' : ''}{summary.netSoldMo.toFixed(1)}/mo</td>}
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="c4-table-note">
+            Same total budget, redistributed: combined cost per lead {summary.combinedCplBefore === null ? '—' : fmt$(summary.combinedCplBefore, 2)} → <b>{summary.combinedCplAfter === null ? '—' : fmt$(summary.combinedCplAfter, 2)}</b> across the affected channels.
+          </div>
+        </>
+      )}
+    </>
   );
 }

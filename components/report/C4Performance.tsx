@@ -58,6 +58,9 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
   function removeType(i: number) {
     onChange({ ...c4, leadTypes: c4.leadTypes.filter((_, idx) => idx !== i) });
   }
+  function setBudget(v: number) {
+    onChange({ ...c4, budget: v });
+  }
 
   const numCell = (val: number, onSet: (v: number) => void, dollar = false) =>
     editMode ? (
@@ -98,6 +101,29 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
         <div className="c4-note">
           Sold and cost-per-sold are <b>projected</b>: C-4 drives traffic but the CRM doesn&apos;t track the sale back to us, so
           C-4&apos;s {Math.round(c.leads).toLocaleString()} leads are closed at the entire report&apos;s blended CRM rate of <b>{pct(c.crmClose)}</b>.
+        </div>
+      )}
+
+      {/* Monthly budget — reference only, separate from the true monthly spend below */}
+      {(editMode || c4.budget > 0) && (
+        <div className="c4-budget">
+          <div className="c4-budget-main">
+            <span className="c4-budget-lab">Monthly budget <span className="hint">reference only — actual spend is entered per month</span></span>
+            {editMode ? (
+              <div className="money-wrap c4-budget-input">
+                <input type="number" min={0} placeholder="0" value={c4.budget || ''} onChange={(e) => setBudget(parseFloat(e.target.value) || 0)} />
+                <span className="month-tag">/ mo</span>
+              </div>
+            ) : (
+              <span className="c4-budget-val">{fmt$(c4.budget)}/mo</span>
+            )}
+          </div>
+          {c4.budget > 0 && (
+            <div className="c4-budget-compare">
+              Budgeted <b>{fmt$(c4.budget * d.months)}</b> over {d.months} mo · actual tracked <b>{fmt$(c.spend)}</b>
+              {' '}({c.spend <= c4.budget * d.months ? fmt$(c4.budget * d.months - c.spend) + ' under' : fmt$(c.spend - c4.budget * d.months) + ' over'})
+            </div>
+          )}
         </div>
       )}
 
