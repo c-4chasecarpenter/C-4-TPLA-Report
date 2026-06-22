@@ -8,6 +8,7 @@ export interface AggregatedRow {
   sold: number;
   bad: number;
   dup: number;
+  gross: number;  // total gross profit summed from the export's gross column(s)
   month?: string; // 'YYYY-MM' when inferrable from filename
 }
 
@@ -20,7 +21,7 @@ export interface Thresholds { cpl: Threshold; close: Threshold; cpa: Threshold; 
 
 export interface SourceEntry { name: string; monthly: number; }
 
-export interface MonthBucket { leads: number; good: number; sold: number; }
+export interface MonthBucket { leads: number; good: number; sold: number; gross: number; }
 
 export interface PlatformAgg {
   name: string;
@@ -28,12 +29,13 @@ export interface PlatformAgg {
   leads: number;
   good: number;
   sold: number;
+  gross: number;
   bm: Record<string, MonthBucket>;
 }
 
 export interface ReportData {
   data: PlatformAgg[];
-  comb: { leads: number; good: number; sold: number; bm: Record<string, MonthBucket> };
+  comb: { leads: number; good: number; sold: number; gross: number; bm: Record<string, MonthBucket> };
   combMonthlySpend: number;
   combPeriodSpend: number;
   months: number;
@@ -42,8 +44,9 @@ export interface ReportData {
   t: Thresholds;
   meta: { deal: string; timeframe: string; description: string };
   unmatchedLeads: number;
-  unmatchedSources: { source: string; leads: number; sold: number }[];
+  unmatchedSources: { source: string; leads: number; sold: number; gross: number }[];
   unknownStatuses: string[];
+  hasGross: boolean;  // any gross detected anywhere in the data
 }
 
 export interface ColumnMap {

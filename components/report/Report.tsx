@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { ReportData, PlatformAgg, Thresholds } from '@/lib/types';
-import { fmt$, pct, metricsRow } from '@/lib/format';
-import { Tiles, Verdict, MonthlyTable, Chart, Kpi } from './parts';
+import { fmt$, pct, metricsRow, profitCls } from '@/lib/format';
+import { Tiles, Verdict, MonthlyTable, Chart, Kpi, ProfitKpiVal, GrossThs, GrossTds } from './parts';
 import ProjectionSlider from './ProjectionSlider';
 import C4Performance from './C4Performance';
 import C4Comparison from './C4Comparison';
@@ -262,16 +262,13 @@ function TakeawayCards({ takeaways }: { takeaways: Takeaway[] }) {
 }
 
 // ---- All Data Sources table (editable spend) ----
-function AllDataSourcesTable({ sources, t, showSold }: {
+function AllDataSourcesTable({ sources, t }: {
   sources: ReportData['unmatchedSources'];
   t: ReportData['t'];
-  showSold: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'spend' | 'sold'>('all');
   const [spendMap, setSpendMap] = useState<Record<string, number>>({});
-
-  const H = (c: string) => (showSold ? c : c + ' hidden');
 
   const filtered = sources
     .filter(s => !search || s.source.toLowerCase().includes(search.toLowerCase()))
@@ -307,9 +304,10 @@ function AllDataSourcesTable({ sources, t, showSold }: {
               <th>Monthly spend</th>
               <th>Good leads</th>
               <th>Cost / good lead</th>
-              <th className={showSold ? '' : 'hidden'}>Sold</th>
-              <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
-              <th className={showSold ? '' : 'hidden'}>Closing rate</th>
+              <th className="sold-col">Sold</th>
+              <th className="sold-col">Cost / sold</th>
+              <th className="sold-col">Closing rate</th>
+              <GrossThs />
             </tr>
           </thead>
           <tbody>
@@ -342,14 +340,15 @@ function AllDataSourcesTable({ sources, t, showSold }: {
                   </td>
                   <td>{s.leads.toLocaleString()}</td>
                   <td className={r?.cplCls ? 'cpa-' + r.cplCls : 'muted'}>{!r || r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
-                  <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
-                  <td className={H(r?.cpaCls ? 'cpa-' + r.cpaCls : 'muted')}>{!r || r.cpa === null ? '—' : fmt$(r.cpa)}</td>
-                  <td className={H(closeCls ? 'cpa-' + closeCls : '')}>{close === null ? '—' : pct(close)}</td>
+                  <td className="sold-col">{s.sold.toLocaleString()}</td>
+                  <td className={'sold-col ' + (r?.cpaCls ? 'cpa-' + r.cpaCls : 'muted')}>{!r || r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+                  <td className={'sold-col ' + (closeCls ? 'cpa-' + closeCls : '')}>{close === null ? '—' : pct(close)}</td>
+                  <GrossTds gross={s.gross} spend={spendVal} />
                 </tr>
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="ads-no-results">No sources match</td></tr>
+              <tr><td colSpan={9} className="ads-no-results">No sources match</td></tr>
             )}
           </tbody>
         </table>
@@ -363,6 +362,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
   const t = d.t;
   const [tab, setTab] = useState('overview');
   const [showSold, setShowSold] = useState(true);
+  const [showGross, setShowGross] = useState(d.hasGross);
+  const [profitMode, setProfitMode] = useState<'roas' | 'dollars'>('roas');
   const [showDlPrompt, setShowDlPrompt] = useState(false);
   const [dlFilename, setDlFilename] = useState('');
   const [dlMode, setDlMode] = useState<'html' | 'pdf'>('html');
@@ -426,6 +427,20 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     clone.querySelector('.dl-prompt')?.remove();
     clone.querySelectorAll('.c4-editbar').forEach((e) => e.remove());
 
+    // Mark the root so the standalone file's vanilla script can flip the
+    // sold/gross/profit classes, and inject a working toggle bar at the top.
+    clone.classList.add('report-root');
+    const soldOn = !clone.classList.contains('hide-sold');
+    const grossOn = !clone.classList.contains('hide-gross');
+    const dollarsOn = clone.classList.contains('show-dollars');
+    const ctrls = document.createElement('div');
+    ctrls.className = 'report-controls export-controls';
+    ctrls.innerHTML =
+      `<label class="switch"><input type="checkbox" data-toggle="hide-sold"${soldOn ? ' checked' : ''}><span class="track"></span>Show sold data</label>` +
+      `<label class="switch"><input type="checkbox" data-toggle="hide-gross"${grossOn ? ' checked' : ''}><span class="track"></span>Show gross data</label>` +
+      `<label class="switch profit-toggle gross-only"><input type="checkbox" data-toggle="show-dollars"${dollarsOn ? ' checked' : ''}><span class="track"></span>Profit as dollars</label>`;
+    clone.insertBefore(ctrls, clone.firstChild);
+
     // Make the tab navigation work in the standalone file (no React/event handlers
     // survive cloneNode). Index each tab + panel in document order, strip any inline
     // display so CSS controls visibility, then a small injected script wires clicks.
@@ -485,7 +500,9 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       // Keep the tab bar visible & interactive; only hide the editor controls.
       // The sticky tab bar stays put when not printing. Panel show/hide is left to
       // the original .panel / .panel.active rules so the injected script can toggle.
-      '.report-controls,.dl-prompt{display:none!important;}',
+      '.dl-prompt{display:none!important;}',
+      // The injected toggle bar stays interactive; give it room.
+      '.export-controls{position:static!important;margin:0 0 18px;}',
       '.tabs{position:static;cursor:default;}',
       '.tab{cursor:pointer;}',
       'body{background:var(--paper);}',
@@ -511,6 +528,11 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       'show(0);',
       // Re-implement the interactive sliders (closing-rate projection + reallocation) for the standalone file.
       `
+      var c4root=document.querySelector('.report-root');
+      if(c4root){[].slice.call(document.querySelectorAll('.export-controls input[data-toggle]')).forEach(function(cb){
+        function apply(){var c=cb.getAttribute('data-toggle');if(c==='show-dollars'){c4root.classList.toggle('show-dollars',cb.checked);}else{c4root.classList.toggle(c,!cb.checked);}}
+        cb.addEventListener('change',apply);apply();
+      });}
       function c4money(n){return '$'+Math.round(n).toLocaleString('en-US');}
       function c4money2(n){return '$'+(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
       function c4lo(v,g,b){if(v==null||isNaN(v))return '';return v<g?'good':(v<=b?'ok':'bad');}
@@ -566,10 +588,10 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           var sp=c4m+sr.reduce(function(x,r){return x+r.cur;},0),lbT=c4r.lb+sr.reduce(function(x,r){return x+r.lb;},0),laT=c4r.la+sr.reduce(function(x,r){return x+r.la;},0);
           return {sr:sr,c4:c4r,moved:totalMoved,netL:netL,netS:netS,cb:lbT>0?sp/lbT:null,ca:laT>0?sp/laT:null};}
         function renderPlan(){if(!region)return;if(!allocs.length){region.innerHTML='';return;}var s=summarize(),sc=showSold;
-          var head='<tr><th class="l">Channel</th><th>Current / mo</th><th>Rec. change</th><th>Updated / mo</th><th>Leads / mo</th>'+(sc?'<th>Sold / mo</th>':'')+'<th></th></tr>';
-          var rows='';s.sr.forEach(function(r){rows+='<tr><td class="l"><b>'+c4esc(r.name)+'</b></td><td>'+c4money(r.cur)+'</td><td class="cpa-bad">'+c4money(r.change)+'</td><td>'+c4money(r.upd)+'</td><td>'+c4leads(r.lb)+' → '+c4leads(r.la)+'</td>'+(sc?'<td>'+r.sb.toFixed(1)+' → '+r.sa.toFixed(1)+'</td>':'')+'<td class="c4-plan-actions"><button class="c4-row-btn" data-edit="'+c4esc(r.name)+'">Edit</button><button class="c4-row-btn del" data-del="'+c4esc(r.name)+'">Delete</button></td></tr>';});
-          var c4r='<tr class="c4-row"><td class="l"><b>C-4 Analytics</b> <span class="wintag">C-4</span></td><td>'+c4money(s.c4.cur)+'</td><td class="cpa-good">+'+c4money(s.c4.change)+'</td><td>'+c4money(s.c4.upd)+'</td><td>'+c4leads(s.c4.lb)+' → '+c4leads(s.c4.la)+'</td>'+(sc?'<td>'+s.c4.sb.toFixed(1)+' → '+s.c4.sa.toFixed(1)+'</td>':'')+'<td></td></tr>';
-          var net='<tr class="tot-row"><td class="l">Net impact</td><td>'+c4money(s.moved)+' moved</td><td>—</td><td>same total</td><td class="'+(s.netL>=0?'cpa-good':'cpa-bad')+'">'+(s.netL>=0?'+':'')+c4leads(s.netL)+'/mo</td>'+(sc?'<td class="'+(s.netS>=0?'cpa-good':'cpa-bad')+'">'+(s.netS>=0?'+':'')+s.netS.toFixed(1)+'/mo</td>':'')+'<td></td></tr>';
+          var head='<tr><th class="l">Channel</th><th>Current / mo</th><th>Rec. change</th><th>Updated / mo</th><th>Leads / mo</th><th class="sold-col">Sold / mo</th><th></th></tr>';
+          var rows='';s.sr.forEach(function(r){rows+='<tr><td class="l"><b>'+c4esc(r.name)+'</b></td><td>'+c4money(r.cur)+'</td><td class="cpa-bad">'+c4money(r.change)+'</td><td>'+c4money(r.upd)+'</td><td>'+c4leads(r.lb)+' → '+c4leads(r.la)+'</td>'+('<td class="sold-col">'+r.sb.toFixed(1)+' → '+r.sa.toFixed(1)+'</td>')+'<td class="c4-plan-actions"><button class="c4-row-btn" data-edit="'+c4esc(r.name)+'">Edit</button><button class="c4-row-btn del" data-del="'+c4esc(r.name)+'">Delete</button></td></tr>';});
+          var c4r='<tr class="c4-row"><td class="l"><b>C-4 Analytics</b> <span class="wintag">C-4</span></td><td>'+c4money(s.c4.cur)+'</td><td class="cpa-good">+'+c4money(s.c4.change)+'</td><td>'+c4money(s.c4.upd)+'</td><td>'+c4leads(s.c4.lb)+' → '+c4leads(s.c4.la)+'</td>'+('<td class="sold-col">'+s.c4.sb.toFixed(1)+' → '+s.c4.sa.toFixed(1)+'</td>')+'<td></td></tr>';
+          var net='<tr class="tot-row"><td class="l">Net impact</td><td>'+c4money(s.moved)+' moved</td><td>—</td><td>same total</td><td class="'+(s.netL>=0?'cpa-good':'cpa-bad')+'">'+(s.netL>=0?'+':'')+c4leads(s.netL)+'/mo</td>'+'<td class="sold-col '+(s.netS>=0?'cpa-good':'cpa-bad')+'">'+(s.netS>=0?'+':'')+s.netS.toFixed(1)+'/mo</td><td></td></tr>';
           var html='<div class="sec-label"><h3>Reallocation plan</h3><span class="note">Recommended monthly budget shifts — edit or remove any row</span></div>'
             +'<div class="card"><table class="cmp c4-plan"><thead>'+head+'</thead><tbody>'+rows+c4r+net+'</tbody></table></div>'
             +'<div class="c4-table-note">Same total budget, redistributed: combined cost per lead '+(s.cb==null?'—':c4money2(s.cb))+' → <b>'+(s.ca==null?'—':c4money2(s.ca))+'</b> across the affected channels.</div>'
@@ -687,16 +709,26 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     }
   }
 
-  const H = (c: string) => (showSold ? c : c + ' hidden');
+  // Sold/gross hiding is class-driven so the toggles also work in the exported HTML.
+  const rootCls = [showSold ? '' : 'hide-sold', showGross ? '' : 'hide-gross', profitMode === 'dollars' ? 'show-dollars' : '']
+    .filter(Boolean).join(' ');
 
   return (
-    <div ref={reportRef} className={showSold ? '' : 'hide-sold'}>
+    <div ref={reportRef} className={rootCls}>
 
       {/* Controls bar — top, above all data */}
       <div className="report-controls">
         <label className="switch">
           <input type="checkbox" checked={showSold} onChange={e => setShowSold(e.target.checked)} />
           <span className="track" />Show sold data
+        </label>
+        <label className="switch">
+          <input type="checkbox" checked={showGross} onChange={e => setShowGross(e.target.checked)} />
+          <span className="track" />Show gross data
+        </label>
+        <label className="switch profit-toggle gross-only">
+          <input type="checkbox" checked={profitMode === 'dollars'} onChange={e => setProfitMode(e.target.checked ? 'dollars' : 'roas')} />
+          <span className="track" />Profit as dollars
         </label>
         <button className="btn btn-ghost" onClick={() => startDownload('html')}>Download Report HTML</button>
         <button className="btn btn-ghost" onClick={() => startDownload('pdf')}>Save as PDF</button>
@@ -765,13 +797,15 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
             <Kpi label="Tracked spend" val={fmt$(d.combPeriodSpend)} foot={`${d.data.length} platform${d.data.length > 1 ? 's' : ''} · ${d.months}mo`} />
             <Kpi label="Good leads" val={d.comb.good.toLocaleString()} foot={`${d.comb.leads.toLocaleString()} total leads`} />
             <Kpi label="Cost / good lead" val={cr.cpl === null ? '—' : fmt$(cr.cpl, 2)} foot="blended" cls={cr.cplCls} />
-            <Kpi label="Vehicles sold" val={d.comb.sold.toLocaleString()} foot="all platforms" sold={!showSold} />
-            <Kpi label="Cost / sold" val={cr.cpa === null ? '—' : fmt$(cr.cpa)} foot="blended" cls={cr.cpaCls} sold={!showSold} />
-            <Kpi label="Closing rate" val={cr.close === null ? '—' : pct(cr.close)} foot="sold of good leads" cls={cr.closeCls} sold={!showSold} />
+            <Kpi label="Vehicles sold" val={d.comb.sold.toLocaleString()} foot="all platforms" only="sold" />
+            <Kpi label="Cost / sold" val={cr.cpa === null ? '—' : fmt$(cr.cpa)} foot="blended" cls={cr.cpaCls} only="sold" />
+            <Kpi label="Closing rate" val={cr.close === null ? '—' : pct(cr.close)} foot="sold of good leads" cls={cr.closeCls} only="sold" />
+            <Kpi label="Total gross" val={fmt$(d.comb.gross)} foot="all platforms" only="gross" />
+            <Kpi label="Return / Profit" val={<ProfitKpiVal gross={d.comb.gross} spend={d.combPeriodSpend} />} foot="gross vs spend" cls={profitCls(d.comb.gross, d.combPeriodSpend)} only="gross" />
           </div>
 
           {/* Rankings */}
-          {(rankedCPL.length > 0 || (showSold && rankedCPA.length > 0)) && (
+          {(rankedCPL.length > 0 || rankedCPA.length > 0) && (
             <>
               <div className="sec-label"><h3>Rankings</h3><span className="note">All configured platforms ranked by efficiency</span></div>
               <div className="rankings-grid">
@@ -787,8 +821,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                     ))}
                   </div>
                 )}
-                {showSold && rankedCPA.length > 0 && (
-                  <div className="rank-card card">
+                {rankedCPA.length > 0 && (
+                  <div className="rank-card card sold-only">
                     <div className="rank-card-head">Lowest Cost / Sold Unit</div>
                     {rankedCPA.map((item, i) => (
                       <div key={item.name} className="rank-item">
@@ -813,9 +847,10 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                   <th>Spend</th>
                   <th>Good leads</th>
                   <th>Cost / good lead</th>
-                  <th className={showSold ? '' : 'hidden'}>Sold</th>
-                  <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
-                  <th className={showSold ? '' : 'hidden'}>Closing rate</th>
+                  <th className="sold-col">Sold</th>
+                  <th className="sold-col">Cost / sold</th>
+                  <th className="sold-col">Closing rate</th>
+                  <GrossThs />
                 </tr>
               </thead>
               <tbody>
@@ -836,9 +871,10 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                       <td>{fmt$(ps)}</td>
                       <td>{s.good.toLocaleString()}</td>
                       <td className={r.cplCls && 'cpa-' + r.cplCls}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
-                      <td className={showSold ? '' : 'hidden'}>{s.sold.toLocaleString()}</td>
-                      <td className={H(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}{winCpa && <span className="wintag">best</span>}</td>
-                      <td className={H(r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '—' : pct(r.close)}</td>
+                      <td className="sold-col">{s.sold.toLocaleString()}</td>
+                      <td className={'sold-col ' + (r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}{winCpa && <span className="wintag">best</span>}</td>
+                      <td className={'sold-col ' + (r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '—' : pct(r.close)}</td>
+                      <GrossTds gross={s.gross} spend={ps} />
                     </tr>
                   );
                 })}
@@ -853,17 +889,15 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           {/* Monthly breakdown */}
           <div className="sec-label"><h3>All 3rd Parties by Month</h3><span className="note">Good leads and sold across every configured platform combined</span></div>
           <div className="card">
-            <Chart d={d} bm={d.comb.bm} showSold={showSold} />
-            <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} showSold={showSold} />
+            <Chart d={d} bm={d.comb.bm} />
+            <MonthlyTable d={d} monthlySpend={d.combMonthlySpend} bm={d.comb.bm} />
           </div>
 
           {/* Projection slider */}
-          {showSold && (
-            <>
-              <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">All platforms blended — drag the slider to model different closing rate outcomes</span></div>
-              <ProjectionSlider spend={d.combPeriodSpend} good={d.comb.good} sold={d.comb.sold} t={t} />
-            </>
-          )}
+          <div className="sold-only">
+            <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">All platforms blended — drag the slider to model different closing rate outcomes</span></div>
+            <ProjectionSlider spend={d.combPeriodSpend} good={d.comb.good} sold={d.comb.sold} t={t} />
+          </div>
 
           {/* All Data Sources (unmatched) */}
           {d.unmatchedSources.length > 0 && (
@@ -872,7 +906,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                 <h3>All Data Sources</h3>
                 <span className="note">Sources in your CRM data — enter monthly spend to calculate cost metrics</span>
               </div>
-              <AllDataSourcesTable sources={d.unmatchedSources} t={t} showSold={showSold} />
+              <AllDataSourcesTable sources={d.unmatchedSources} t={t} />
             </div>
           )}
 
@@ -892,19 +926,17 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
                   <div className="h">{s.name}</div>
                   <div className="spend-tag"><b>{fmt$(s.monthly)}</b> / mo &times; {d.months} = <b>{fmt$(s.monthly * d.months)}</b></div>
                 </div>
-                {showSold && <Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />}
-                <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} showSold={showSold} />
+                <div className="sold-only"><Verdict spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} /></div>
+                <Tiles spend={s.monthly * d.months} good={s.good} sold={s.sold} gross={s.gross} t={t} />
                 <div className="sec-label"><h3>By month</h3><span className="note">{s.name} performance across the period</span></div>
                 <div className="card">
-                  <Chart d={d} bm={s.bm} showSold={showSold} />
-                  <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} showSold={showSold} />
+                  <Chart d={d} bm={s.bm} />
+                  <MonthlyTable d={d} monthlySpend={s.monthly} bm={s.bm} />
                 </div>
-                {showSold && (
-                  <>
-                    <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
-                    <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
-                  </>
-                )}
+                <div className="sold-only">
+                  <div className="sec-label"><h3>Cost per sale by closing rate</h3><span className="note">{s.name} — drag the slider to model different closing rate outcomes</span></div>
+                  <ProjectionSlider spend={s.monthly * d.months} good={s.good} sold={s.sold} t={t} />
+                </div>
               </div>{/* /panel-content */}
               <Rail t={t} showSold={showSold} takeaways={ptw} note={`${s.name} analysis`} />
             </div>{/* /panel-body */}

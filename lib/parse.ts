@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { Row, AggregatedRow, ParseResult } from './types';
+import { resolveGrossIdx, parseMoney } from './gross';
 
 const normH = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -68,24 +69,27 @@ function parseDealerSocketWide(data: string[][], hIdx: number, variant: DSVarian
 
   if (srcIdx < 0 || leadIdx < 0 || soldIdx < 0) return [];
 
+  const grossIdx = resolveGrossIdx(headers);
   const month = inferMonth(fileName);
   // Accumulate because the same tracking code appears once per Source category row
-  const acc = new Map<string, { good: number; sold: number }>();
+  const acc = new Map<string, { good: number; sold: number; gross: number }>();
 
   for (const row of data.slice(hIdx + 1)) {
     const src = (row[srcIdx] ?? '').trim();
     if (!src) continue;
     const leads = parseInt(row[leadIdx] ?? '') || 0;
     const sold  = parseInt(row[soldIdx]  ?? '') || 0;
-    if (leads + sold === 0) continue;
-    const prev = acc.get(src) ?? { good: 0, sold: 0 };
+    const gross = grossIdx.reduce((g, i) => g + parseMoney(row[i]), 0);
+    if (leads + sold === 0 && gross === 0) continue;
+    const prev = acc.get(src) ?? { good: 0, sold: 0, gross: 0 };
     prev.good += leads;
     prev.sold += sold;
+    prev.gross += gross;
     acc.set(src, prev);
   }
 
-  return Array.from(acc.entries()).map(([source, { good, sold }]) => ({
-    source, good, sold, bad: 0, dup: 0, month,
+  return Array.from(acc.entries()).map(([source, { good, sold, gross }]) => ({
+    source, good, sold, gross, bad: 0, dup: 0, month,
   }));
 }
 
@@ -110,6 +114,7 @@ function parseAggregated(data: string[][], hIdx: number, fileName: string): Aggr
 
   if (srcIdx < 0 || goodIdx < 0 || soldIdx < 0) return [];
 
+  const grossIdx = resolveGrossIdx(headers);
   const month = inferMonth(fileName);
   const rows: AggregatedRow[] = [];
 
@@ -122,9 +127,10 @@ function parseAggregated(data: string[][], hIdx: number, fileName: string): Aggr
     const sold = parseInt(row[soldIdx] ?? '') || 0;
     const bad = badIdx >= 0 ? (parseInt(row[badIdx] ?? '') || 0) : 0;
     const dup = dupIdx >= 0 ? (parseInt(row[dupIdx] ?? '') || 0) : 0;
+    const gross = grossIdx.reduce((g, i) => g + parseMoney(row[i]), 0);
 
-    if (good + sold + bad + dup === 0) continue;
-    rows.push({ source: src, good, sold, bad, dup, month });
+    if (good + sold + bad + dup === 0 && gross === 0) continue;
+    rows.push({ source: src, good, sold, bad, dup, gross, month });
   }
   return rows;
 }

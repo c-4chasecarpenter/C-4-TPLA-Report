@@ -1,4 +1,5 @@
 import { ColumnMap, MonthBucket, PlatformAgg, ReportData, Row, ParseResult, SourceEntry, Thresholds } from './types';
+import { resolveGrossHeaders, rowGross } from './gross';
 
 export type { Row };
 
@@ -156,14 +157,17 @@ export function analyze(
   if (noDates) { mkeys = ['all']; mlabels = ['All data']; }
 
   const blank = () => {
-    const o = { leads: 0, good: 0, sold: 0, bm: {} as Record<string, MonthBucket> };
-    mkeys.forEach((k) => (o.bm[k] = { leads: 0, good: 0, sold: 0 }));
+    const o = { leads: 0, good: 0, sold: 0, gross: 0, bm: {} as Record<string, MonthBucket> };
+    mkeys.forEach((k) => (o.bm[k] = { leads: 0, good: 0, sold: 0, gross: 0 }));
     return o;
   };
 
   const data: PlatformAgg[] = entries.map((e) => ({ name: e.name, monthly: e.monthly, ...blank() }));
-  const unmatchedMap = new Map<string, { good: number; sold: number }>();
+  const unmatchedMap = new Map<string, { good: number; sold: number; gross: number }>();
   const unknownStatusSet = new Set<string>();
+
+  // Gross columns vary wildly in naming; resolve them once from the desk-log headers.
+  const grossHeaders = deskRows.length ? resolveGrossHeaders(Object.keys(deskRows[0])) : [];
 
   // --- Desk log rows: row-level, normalize status ---
   for (const r of deskRows) {
@@ -183,6 +187,7 @@ export function analyze(
     if (bucket === 'bad') continue;
 
     const sold = bucket === 'sold';
+    const rowG = grossHeaders.length ? rowGross(r, grossHeaders) : 0;
 
     let mk = noDates ? 'all' : mkeys[0];
     if (!noDates && cols.created) {
@@ -200,12 +205,12 @@ export function analyze(
 
     if (best) {
       const D = data.find((x) => x.name === best!.name)!;
-      D.leads++; D.good++; if (sold) D.sold++;
-      const b = D.bm[mk] || (D.bm[mk] = { leads: 0, good: 0, sold: 0 });
-      b.leads++; b.good++; if (sold) b.sold++;
+      D.leads++; D.good++; if (sold) D.sold++; D.gross += rowG;
+      const b = D.bm[mk] || (D.bm[mk] = { leads: 0, good: 0, sold: 0, gross: 0 });
+      b.leads++; b.good++; if (sold) b.sold++; b.gross += rowG;
     } else {
-      const um = unmatchedMap.get(src) ?? { good: 0, sold: 0 };
-      um.good += 1; if (sold) um.sold += 1;
+      const um = unmatchedMap.get(src) ?? { good: 0, sold: 0, gross: 0 };
+      um.good += 1; if (sold) um.sold += 1; um.gross += rowG;
       unmatchedMap.set(src, um);
     }
   }
@@ -221,29 +226,31 @@ export function analyze(
 
     if (best) {
       const D = data.find((x) => x.name === best!.name)!;
-      D.leads += r.good; D.good += r.good; D.sold += r.sold;
-      const b = D.bm[mk] || (D.bm[mk] = { leads: 0, good: 0, sold: 0 });
-      b.leads += r.good; b.good += r.good; b.sold += r.sold;
+      D.leads += r.good; D.good += r.good; D.sold += r.sold; D.gross += r.gross;
+      const b = D.bm[mk] || (D.bm[mk] = { leads: 0, good: 0, sold: 0, gross: 0 });
+      b.leads += r.good; b.good += r.good; b.sold += r.sold; b.gross += r.gross;
     } else {
-      const um = unmatchedMap.get(r.source) ?? { good: 0, sold: 0 };
-      um.good += r.good; um.sold += r.sold;
+      const um = unmatchedMap.get(r.source) ?? { good: 0, sold: 0, gross: 0 };
+      um.good += r.good; um.sold += r.sold; um.gross += r.gross;
       unmatchedMap.set(r.source, um);
     }
   }
 
   const unmatchedSources = Array.from(unmatchedMap.entries())
-    .map(([source, { good, sold }]) => ({ source, leads: good, sold }))
+    .map(([source, { good, sold, gross }]) => ({ source, leads: good, sold, gross }))
     .sort((a, b) => b.leads - a.leads);
   const unmatchedLeads = unmatchedSources.reduce((s, x) => s + x.leads, 0);
+  const unmatchedGross = unmatchedSources.reduce((s, x) => s + x.gross, 0);
 
   const comb = blank();
   for (const s of data) {
-    comb.leads += s.leads; comb.good += s.good; comb.sold += s.sold;
+    comb.leads += s.leads; comb.good += s.good; comb.sold += s.sold; comb.gross += s.gross;
     mkeys.forEach((k) => {
       if (s.bm[k]) {
         comb.bm[k].leads += s.bm[k].leads;
         comb.bm[k].good += s.bm[k].good;
         comb.bm[k].sold += s.bm[k].sold;
+        comb.bm[k].gross += s.bm[k].gross;
       }
     });
   }
@@ -255,5 +262,6 @@ export function analyze(
     unmatchedLeads,
     unmatchedSources,
     unknownStatuses: Array.from(unknownStatusSet).sort(),
+    hasGross: comb.gross !== 0 || unmatchedGross !== 0,
   };
 }

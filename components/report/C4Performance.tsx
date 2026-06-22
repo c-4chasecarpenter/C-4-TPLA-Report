@@ -1,7 +1,7 @@
 'use client';
 import { ReportData } from '@/lib/types';
-import { fmt$, pct, metricsRow } from '@/lib/format';
-import { Kpi } from './parts';
+import { fmt$, pct, metricsRow, profitCls } from '@/lib/format';
+import { Kpi, GrossThs, GrossTds, ProfitKpiVal } from './parts';
 import { C4Data, C4Computed, C4LeadType, isWebsiteKey } from '@/lib/c4';
 
 // Shared edit toggle shown at the top of both C-4 tabs.
@@ -31,7 +31,6 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
 }) {
   const t = d.t;
   const c = computed;
-  const H = (cls: string) => (showSold ? cls : cls + ' hidden');
 
   // ---- mutations ----
   function setSpend(mk: string, v: number) {
@@ -95,17 +94,18 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
         <Kpi label="Tracked spend" val={fmt$(c.spend)} foot={`${c.months} active month${c.months === 1 ? '' : 's'}`} />
         <Kpi label="Good leads" val={Math.round(c.leads).toLocaleString()} foot={`${websiteTypes.reduce((s, x) => s + x.leads, 0).toLocaleString()} from website`} />
         <Kpi label="Cost / good lead" val={c.metrics.cpl === null ? '—' : fmt$(c.metrics.cpl, 2)} foot="C-4 channels" cls={c.metrics.cplCls} />
-        <Kpi label="Vehicles sold" val={c.sold.toLocaleString()} foot="projected" sold={!showSold} />
-        <Kpi label="Cost / sold" val={c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)} foot="projected" cls={c.metrics.cpaCls} sold={!showSold} />
-        <Kpi label="Closing rate" val={c.crmClose > 0 ? pct(c.crmClose) : '—'} foot="blended CRM avg" cls={c.metrics.closeCls} sold={!showSold} />
+        <Kpi label="Vehicles sold" val={c.sold.toLocaleString()} foot="projected" only="sold" />
+        <Kpi label="Cost / sold" val={c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)} foot="projected" cls={c.metrics.cpaCls} only="sold" />
+        <Kpi label="Closing rate" val={c.crmClose > 0 ? pct(c.crmClose) : '—'} foot="blended CRM avg" cls={c.metrics.closeCls} only="sold" />
+        <Kpi label="Total gross" val={fmt$(c.gross)} foot="projected" only="gross" />
+        <Kpi label="Return / Profit" val={<ProfitKpiVal gross={c.gross} spend={c.spend} />} foot="gross vs spend" cls={profitCls(c.gross, c.spend)} only="gross" />
       </div>
 
-      {showSold && (
-        <div className="c4-note">
-          Sold and cost-per-sold are <b>projected</b>: C-4 drives traffic but the CRM doesn&apos;t track the sale back to us, so
-          C-4&apos;s {Math.round(c.leads).toLocaleString()} leads are closed at the entire report&apos;s blended CRM rate of <b>{pct(c.crmClose)}</b>.
-        </div>
-      )}
+      <div className="c4-note sold-only">
+        Sold and cost-per-sold are <b>projected</b>: C-4 drives traffic but the CRM doesn&apos;t track the sale back to us, so
+        C-4&apos;s {Math.round(c.leads).toLocaleString()} leads are closed at the entire report&apos;s blended CRM rate of <b>{pct(c.crmClose)}</b>
+        {c.grossPerSold > 0 ? <>, and gross is projected at <b>{fmt$(c.grossPerSold)}</b>/sold (blended CRM average)</> : null}.
+      </div>
 
       {/* C-4 active date range — C-4 often starts partway through the report period */}
       {editMode && d.mkeys[0] !== 'all' && (
@@ -215,9 +215,10 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
               <th>Spend</th>
               {c4.leadTypes.map((lt) => <th key={lt.key} className="c4-type-col">{lt.label}</th>)}
               <th>Leads</th>
-              <th className={showSold ? '' : 'hidden'}>Sold</th>
+              <th className="sold-col">Sold</th>
               <th>Cost / lead</th>
-              <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
+              <th className="sold-col">Cost / sold</th>
+              <GrossThs />
             </tr>
           </thead>
           <tbody>
@@ -234,9 +235,10 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
                     <td key={lt.key} className="c4-type-col">{numCell(m.leads?.[lt.key] ?? 0, (v) => setLead(mk, lt.key, v))}</td>
                   ))}
                   <td><b>{bm.leads.toLocaleString()}</b></td>
-                  <td className={showSold ? '' : 'hidden'}>{soldR.toLocaleString()}</td>
+                  <td className="sold-col">{soldR.toLocaleString()}</td>
                   <td className={r.cplCls && 'cpa-' + r.cplCls}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
-                  <td className={H(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+                  <td className={'sold-col ' + (r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+                  <GrossTds gross={bm.gross} spend={bm.spend} />
                 </tr>
               );
             })}
@@ -248,9 +250,10 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
                 return <td key={lt.key} className="c4-type-col">{tot.toLocaleString()}</td>;
               })}
               <td><b>{Math.round(c.leads).toLocaleString()}</b></td>
-              <td className={showSold ? '' : 'hidden'}>{c.sold.toLocaleString()}</td>
+              <td className="sold-col">{c.sold.toLocaleString()}</td>
               <td className={c.metrics.cplCls && 'cpa-' + c.metrics.cplCls}>{c.metrics.cpl === null ? '—' : fmt$(c.metrics.cpl, 2)}</td>
-              <td className={H(c.metrics.cpaCls && 'cpa-' + c.metrics.cpaCls)}>{c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)}</td>
+              <td className={'sold-col ' + (c.metrics.cpaCls && 'cpa-' + c.metrics.cpaCls)}>{c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)}</td>
+              <GrossTds gross={c.gross} spend={c.spend} />
             </tr>
           </tbody>
         </table>

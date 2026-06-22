@@ -1,25 +1,37 @@
 'use client';
+import { ReactNode } from 'react';
 import { ReportData, Thresholds } from '@/lib/types';
-import { fmt$, pct, metricsRow, RowMetrics } from '@/lib/format';
+import { fmt$, pct, metricsRow, roas, fmtMult, fmtSigned$, profitCls } from '@/lib/format';
 
-export function LegendTable({ t, sold }: { t: Thresholds; sold: boolean }) {
-  const so = (c: string) => (sold ? c : c + ' hidden');
+// Sold / gross visibility is driven entirely by root classes (.hide-sold,
+// .hide-gross) on stable marker classes (.sold-col/.sold-only, .gross-col/
+// .gross-only). The ×↔$ profit switch is driven by .show-dollars. This keeps
+// every toggle a single class flip, so they also work in the downloaded HTML.
+
+// Two header cells (Gross + Return/Profit) — always rendered, hidden via CSS.
+export function GrossThs() {
+  return (<><th className="gross-col">Gross</th><th className="gross-col">Return / Profit</th></>);
+}
+
+// Matching body cells. The profit cell carries both representations.
+export function GrossTds({ gross, spend }: { gross: number; spend: number }) {
+  const r = roas(gross, spend);
+  const net = gross - spend;
+  const pc = profitCls(gross, spend);
   return (
-    <table className="legend">
-      <thead><tr><th className="l">Performance tier</th><th>Cost per good lead</th>
-        <th className={sold ? '' : 'hidden'}>Closing rate</th><th className={sold ? '' : 'hidden'}>Cost per sold</th></tr></thead>
-      <tbody>
-        <tr><td className="l"><span className="tier-dot cpa-good" /><b>Good</b></td><td className="cpa-good">Under {fmt$(t.cpl.good)}</td><td className={'cpa-good ' + (sold ? '' : 'hidden')}>Over {t.close.good}%</td><td className={'cpa-good ' + (sold ? '' : 'hidden')}>Under {fmt$(t.cpa.good)}</td></tr>
-        <tr><td className="l"><span className="tier-dot cpa-ok" /><b>Medium</b></td><td className="cpa-ok">{fmt$(t.cpl.good)} to {fmt$(t.cpl.bad)}</td><td className={'cpa-ok ' + (sold ? '' : 'hidden')}>{t.close.bad}% to {t.close.good}%</td><td className={'cpa-ok ' + (sold ? '' : 'hidden')}>{fmt$(t.cpa.good)} to {fmt$(t.cpa.bad)}</td></tr>
-        <tr><td className="l"><span className="tier-dot cpa-bad" /><b>Bad</b></td><td className="cpa-bad">Over {fmt$(t.cpl.bad)}</td><td className={'cpa-bad ' + (sold ? '' : 'hidden')}>Under {t.close.bad}%</td><td className={'cpa-bad ' + (sold ? '' : 'hidden')}>Over {fmt$(t.cpa.bad)}</td></tr>
-      </tbody>
-    </table>
+    <>
+      <td className="gross-col">{fmt$(gross)}</td>
+      <td className={'gross-col' + (pc ? ' cpa-' + pc : '')}>
+        <span className="profit-roas">{fmtMult(r)}</span>
+        <span className="profit-dollars">{fmtSigned$(net)}</span>
+      </td>
+    </>
   );
 }
 
-export function Kpi({ label, val, foot, cls, sold }: { label: string; val: string; foot: string; cls?: string; sold?: boolean }) {
+export function Kpi({ label, val, foot, cls, only }: { label: string; val: ReactNode; foot: string; cls?: string; only?: 'sold' | 'gross' }) {
   return (
-    <div className={'kpi' + (sold ? ' hidden' : '')}>
+    <div className={'kpi' + (only ? ' ' + only + '-only' : '')}>
       <div className="k-label">{label}</div>
       <div className={'k-val ' + (cls ? 'cpa-' + cls : '')}>{val}</div>
       <div className="k-foot">{foot}</div>
@@ -27,19 +39,29 @@ export function Kpi({ label, val, foot, cls, sold }: { label: string; val: strin
   );
 }
 
-export function Tiles({ spend, good, sold, t, showSold }: { spend: number; good: number; sold: number; t: Thresholds; showSold: boolean }) {
+// A KPI value that shows return-on-spend or net profit per the .show-dollars toggle.
+export function ProfitKpiVal({ gross, spend }: { gross: number; spend: number }) {
+  return (
+    <>
+      <span className="profit-roas">{fmtMult(roas(gross, spend))}</span>
+      <span className="profit-dollars">{fmtSigned$(gross - spend)}</span>
+    </>
+  );
+}
+
+export function Tiles({ spend, good, sold, gross, t }: { spend: number; good: number; sold: number; gross: number; t: Thresholds }) {
   const r = metricsRow(spend, good, sold, t);
   const cls = (c: string) => 't-val ' + c;
   return (
     <div className="tiles">
       <div className="tile"><div className="t-lab">Period spend</div><div className="t-val">{fmt$(spend)}</div></div>
       <div className="tile"><div className="t-lab">Good leads</div><div className="t-val">{good.toLocaleString()}</div></div>
-      <div className="tile"><div className="t-lab">Cost / good lead</div><div className={cls(r.cplCls && 'cpa-' + r.cplCls)}>{r.cpl === null ? '\u2014' : fmt$(r.cpl, 2)}</div></div>
-      {showSold && <>
-        <div className="tile"><div className="t-lab">Vehicles sold</div><div className="t-val">{sold.toLocaleString()}</div></div>
-        <div className="tile"><div className="t-lab">Cost / sold</div><div className={cls(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '\u2014' : fmt$(r.cpa)}</div></div>
-        <div className="tile"><div className="t-lab">Closing rate</div><div className={cls(r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '\u2014' : pct(r.close)}</div></div>
-      </>}
+      <div className="tile"><div className="t-lab">Cost / good lead</div><div className={cls(r.cplCls && 'cpa-' + r.cplCls)}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}</div></div>
+      <div className="tile sold-only"><div className="t-lab">Vehicles sold</div><div className="t-val">{sold.toLocaleString()}</div></div>
+      <div className="tile sold-only"><div className="t-lab">Cost / sold</div><div className={cls(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}</div></div>
+      <div className="tile sold-only"><div className="t-lab">Closing rate</div><div className={cls(r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '—' : pct(r.close)}</div></div>
+      <div className="tile gross-only"><div className="t-lab">Gross</div><div className="t-val">{fmt$(gross)}</div></div>
+      <div className="tile gross-only"><div className="t-lab">Return / Profit</div><div className={cls(profitCls(gross, spend) && 'cpa-' + profitCls(gross, spend))}><span className="profit-roas">{fmtMult(roas(gross, spend))}</span><span className="profit-dollars">{fmtSigned$(gross - spend)}</span></div></div>
     </div>
   );
 }
@@ -56,45 +78,48 @@ export function Verdict({ spend, good, sold, t }: { spend: number; good: number;
   return <div className={'verdict ' + v}><span className="vd" />{msg}</div>;
 }
 
-export function MonthlyTable({ d, monthlySpend, bm, showSold }: { d: ReportData; monthlySpend: number; bm: ReportData['comb']['bm']; showSold: boolean }) {
+export function MonthlyTable({ d, monthlySpend, bm }: { d: ReportData; monthlySpend: number; bm: ReportData['comb']['bm'] }) {
   let bestKey: string | null = null, best = Infinity;
   d.mkeys.forEach((k) => { const b = bm[k]; if (b.good > 0) { const c = monthlySpend / b.good; if (c < best) { best = c; bestKey = k; } } });
   const tg = d.mkeys.reduce((s, k) => s + bm[k].good, 0);
   const ts = d.mkeys.reduce((s, k) => s + bm[k].sold, 0);
+  const tgr = d.mkeys.reduce((s, k) => s + bm[k].gross, 0);
   const psp = monthlySpend * d.months;
   const tr = metricsRow(psp, tg, ts, d.t);
-  const H = (c: string) => (showSold ? c : c + ' hidden');
   return (
     <table className="mtab">
       <thead><tr><th className="l">Month</th><th>Spend</th><th>Good leads</th>
-        <th className={showSold ? '' : 'hidden'}>Sold</th><th>Cost / good lead</th>
-        <th className={showSold ? '' : 'hidden'}>Cost / sold</th><th className={showSold ? '' : 'hidden'}>Closing rate</th></tr></thead>
+        <th className="sold-col">Sold</th><th>Cost / good lead</th>
+        <th className="sold-col">Cost / sold</th><th className="sold-col">Closing rate</th>
+        <GrossThs /></tr></thead>
       <tbody>
         {d.mkeys.map((k, i) => {
           const b = bm[k]; const r = metricsRow(monthlySpend, b.good, b.sold, d.t); const isBest = k === bestKey;
           return (
             <tr key={k}>
               <td className="l">{d.mlabels[i]}</td><td>{fmt$(monthlySpend)}</td><td>{b.good.toLocaleString()}</td>
-              <td className={showSold ? '' : 'hidden'}>{b.sold.toLocaleString()}</td>
-              <td className={(r.cplCls && 'cpa-' + r.cplCls) + (isBest ? ' best' : '')}>{r.cpl === null ? '\u2014' : fmt$(r.cpl, 2)}{isBest && <span className="mk">best</span>}</td>
-              <td className={H(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '\u2014' : fmt$(r.cpa)}</td>
-              <td className={H(r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '\u2014' : pct(r.close)}</td>
+              <td className="sold-col">{b.sold.toLocaleString()}</td>
+              <td className={(r.cplCls && 'cpa-' + r.cplCls) + (isBest ? ' best' : '')}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}{isBest && <span className="mk">best</span>}</td>
+              <td className={'sold-col ' + (r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+              <td className={'sold-col ' + (r.closeCls && 'cpa-' + r.closeCls)}>{r.close === null ? '—' : pct(r.close)}</td>
+              <GrossTds gross={b.gross} spend={monthlySpend} />
             </tr>
           );
         })}
         <tr className="tot-row">
           <td className="l">Period total</td><td>{fmt$(psp)}</td><td>{tg.toLocaleString()}</td>
-          <td className={showSold ? '' : 'hidden'}>{ts.toLocaleString()}</td>
-          <td className={tr.cplCls && 'cpa-' + tr.cplCls}>{tr.cpl === null ? '\u2014' : fmt$(tr.cpl, 2)}</td>
-          <td className={H(tr.cpaCls && 'cpa-' + tr.cpaCls)}>{tr.cpa === null ? '\u2014' : fmt$(tr.cpa)}</td>
-          <td className={H(tr.closeCls && 'cpa-' + tr.closeCls)}>{tr.close === null ? '\u2014' : pct(tr.close)}</td>
+          <td className="sold-col">{ts.toLocaleString()}</td>
+          <td className={tr.cplCls && 'cpa-' + tr.cplCls}>{tr.cpl === null ? '—' : fmt$(tr.cpl, 2)}</td>
+          <td className={'sold-col ' + (tr.cpaCls && 'cpa-' + tr.cpaCls)}>{tr.cpa === null ? '—' : fmt$(tr.cpa)}</td>
+          <td className={'sold-col ' + (tr.closeCls && 'cpa-' + tr.closeCls)}>{tr.close === null ? '—' : pct(tr.close)}</td>
+          <GrossTds gross={tgr} spend={psp} />
         </tr>
       </tbody>
     </table>
   );
 }
 
-export function Chart({ d, bm, showSold }: { d: ReportData; bm: ReportData['comb']['bm']; showSold: boolean }) {
+export function Chart({ d, bm }: { d: ReportData; bm: ReportData['comb']['bm'] }) {
   if (d.mkeys.length < 2 && d.mkeys[0] === 'all') return null;
   const W = 900, H = 230, padL = 24, padR = 16, padT = 22, padB = 40;
   const n = d.mkeys.length, gw = (W - padL - padR) / n;
@@ -112,10 +137,8 @@ export function Chart({ d, bm, showSold }: { d: ReportData; bm: ReportData['comb
               <g key={k}>
                 <rect x={cx - bw - 2} y={y(gv)} width={bw} height={H - padB - y(gv)} rx={3} fill="#131010" />
                 <text x={cx - bw / 2 - 2} y={y(gv) - 6} textAnchor="middle" fontSize="10" fill="#453F3F" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif" fontWeight="700">{gv}</text>
-                {showSold && <>
-                  <rect x={cx + 2} y={y(sv)} width={bw} height={H - padB - y(sv)} rx={3} fill="#FD5900" />
-                  <text x={cx + bw / 2 + 2} y={y(sv) - 6} textAnchor="middle" fontSize="10" fill="#FD5900" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif" fontWeight="700">{sv}</text>
-                </>}
+                <rect className="sold-only" x={cx + 2} y={y(sv)} width={bw} height={H - padB - y(sv)} rx={3} fill="#FD5900" />
+                <text className="sold-only" x={cx + bw / 2 + 2} y={y(sv) - 6} textAnchor="middle" fontSize="10" fill="#FD5900" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif" fontWeight="700">{sv}</text>
                 <text x={cx} y={H - padB + 18} textAnchor="middle" fontSize="11" fill="#8E8382" fontFamily="Hanken Grotesk, Helvetica Neue, Arial, sans-serif">{d.mlabels[i]}</text>
               </g>
             );
@@ -124,7 +147,7 @@ export function Chart({ d, bm, showSold }: { d: ReportData; bm: ReportData['comb
       </div>
       <div className="chart-legend">
         <span><span className="lswatch" style={{ background: '#131010' }} />Good leads</span>
-        {showSold && <span><span className="lswatch" style={{ background: 'var(--orange)' }} />Vehicles sold</span>}
+        <span className="sold-only"><span className="lswatch" style={{ background: 'var(--orange)' }} />Vehicles sold</span>
       </div>
     </>
   );

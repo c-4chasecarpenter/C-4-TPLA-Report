@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { ReportData } from '@/lib/types';
-import { fmt$, pct } from '@/lib/format';
+import { fmt$, pct, roas, fmtMult } from '@/lib/format';
 import { C4Computed, C4Comparison as Cmp, buildComparison, crmCloseDetail, Allocation, summarizeAllocations } from '@/lib/c4';
 import { C4EditBar } from './C4Performance';
+import { GrossThs, GrossTds } from './parts';
 
 export default function C4Comparison({ computed, d, showSold, editMode, onToggle, onSave }: {
   computed: C4Computed;
@@ -15,7 +16,6 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
 }) {
   const cmp = buildComparison(computed, d);
   const close = crmCloseDetail(d);
-  const H = (cls: string) => (showSold ? cls : cls + ' hidden');
 
   return (
     <>
@@ -44,14 +44,20 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
               good={cmp.beatsCplCount >= Math.ceil(cmp.rows.length / 2)}
               sub="third parties undercut by C-4"
             />
-            {showSold && (
-              <ScoreCard
-                label="Cost per sold vs third parties"
-                big={cmp.cpaEdgePct === null ? '—' : (cmp.cpaEdgePct >= 0 ? `${cmp.cpaEdgePct.toFixed(0)}% cheaper` : `${Math.abs(cmp.cpaEdgePct).toFixed(0)}% pricier`)}
-                good={(cmp.cpaEdgePct ?? 0) >= 0}
-                sub={`C-4 ${computed.metrics.cpa === null ? '—' : fmt$(computed.metrics.cpa)} vs ${cmp.thirdBlended.m.cpa === null ? '—' : fmt$(cmp.thirdBlended.m.cpa)} blended`}
-              />
-            )}
+            <ScoreCard
+              only="sold"
+              label="Cost per sold vs third parties"
+              big={cmp.cpaEdgePct === null ? '—' : (cmp.cpaEdgePct >= 0 ? `${cmp.cpaEdgePct.toFixed(0)}% cheaper` : `${Math.abs(cmp.cpaEdgePct).toFixed(0)}% pricier`)}
+              good={(cmp.cpaEdgePct ?? 0) >= 0}
+              sub={`C-4 ${computed.metrics.cpa === null ? '—' : fmt$(computed.metrics.cpa)} vs ${cmp.thirdBlended.m.cpa === null ? '—' : fmt$(cmp.thirdBlended.m.cpa)} blended`}
+            />
+            <ScoreCard
+              only="gross"
+              label="Return on spend"
+              big={fmtMult(roas(computed.gross, computed.spend))}
+              good={(roas(computed.gross, computed.spend) ?? 0) >= (roas(cmp.thirdBlended.gross, cmp.thirdBlended.spend) ?? 0)}
+              sub={`C-4 vs ${fmtMult(roas(cmp.thirdBlended.gross, cmp.thirdBlended.spend))} blended (gross ÷ spend)`}
+            />
             <ScoreCard
               label="Lead volume"
               big={Math.round(computed.leads).toLocaleString()}
@@ -71,23 +77,25 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
                   <th>Spend (period)</th>
                   <th>Leads</th>
                   <th>Cost / lead</th>
-                  <th className={showSold ? '' : 'hidden'}>Sold</th>
-                  <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
-                  <th className={showSold ? '' : 'hidden'}>Closing</th>
+                  <th className="sold-col">Sold</th>
+                  <th className="sold-col">Cost / sold</th>
+                  <th className="sold-col">Closing</th>
+                  <GrossThs />
                 </tr>
               </thead>
               <tbody>
-                <CmpRow row={cmp.c4} showSold={showSold} highlight />
-                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} showSold={showSold} />)}
+                <CmpRow row={cmp.c4} highlight />
+                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} />)}
                 <tr className="tot-row">
                   <td className="l">{cmp.thirdBlended.name}</td>
                   <td>{fmt$(cmp.thirdBlended.monthly)}</td>
                   <td>{fmt$(cmp.thirdBlended.spend)}</td>
                   <td>{cmp.thirdBlended.leads.toLocaleString()}</td>
                   <td className={cmp.thirdBlended.m.cplCls && 'cpa-' + cmp.thirdBlended.m.cplCls}>{cmp.thirdBlended.m.cpl === null ? '—' : fmt$(cmp.thirdBlended.m.cpl, 2)}</td>
-                  <td className={showSold ? '' : 'hidden'}>{cmp.thirdBlended.sold.toLocaleString()}</td>
-                  <td className={H(cmp.thirdBlended.m.cpaCls && 'cpa-' + cmp.thirdBlended.m.cpaCls)}>{cmp.thirdBlended.m.cpa === null ? '—' : fmt$(cmp.thirdBlended.m.cpa)}</td>
-                  <td className={H(cmp.thirdBlended.m.closeCls && 'cpa-' + cmp.thirdBlended.m.closeCls)}>{cmp.thirdBlended.m.close === null ? '—' : pct(cmp.thirdBlended.m.close)}</td>
+                  <td className="sold-col">{cmp.thirdBlended.sold.toLocaleString()}</td>
+                  <td className={'sold-col ' + (cmp.thirdBlended.m.cpaCls && 'cpa-' + cmp.thirdBlended.m.cpaCls)}>{cmp.thirdBlended.m.cpa === null ? '—' : fmt$(cmp.thirdBlended.m.cpa)}</td>
+                  <td className={'sold-col ' + (cmp.thirdBlended.m.closeCls && 'cpa-' + cmp.thirdBlended.m.closeCls)}>{cmp.thirdBlended.m.close === null ? '—' : pct(cmp.thirdBlended.m.close)}</td>
+                  <GrossTds gross={cmp.thirdBlended.gross} spend={cmp.thirdBlended.spend} />
                 </tr>
               </tbody>
             </table>
@@ -109,9 +117,9 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
   );
 }
 
-function ScoreCard({ label, big, sub, good }: { label: string; big: string; sub: string; good: boolean }) {
+function ScoreCard({ label, big, sub, good, only }: { label: string; big: string; sub: string; good: boolean; only?: 'sold' | 'gross' }) {
   return (
-    <div className={'c4-score ' + (good ? 'is-good' : 'is-bad')}>
+    <div className={'c4-score ' + (good ? 'is-good' : 'is-bad') + (only ? ' ' + only + '-only' : '')}>
       <div className="c4-score-lab">{label}</div>
       <div className="c4-score-big">{big}</div>
       <div className="c4-score-sub">{sub}</div>
@@ -119,8 +127,7 @@ function ScoreCard({ label, big, sub, good }: { label: string; big: string; sub:
   );
 }
 
-function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolean; highlight?: boolean }) {
-  const H = (cls: string) => (showSold ? cls : cls + ' hidden');
+function CmpRow({ row, highlight }: { row: Cmp['c4']; highlight?: boolean }) {
   return (
     <tr className={highlight ? 'c4-row' : ''}>
       <td className="l">
@@ -134,9 +141,10 @@ function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolea
       <td>{fmt$(row.spend)}</td>
       <td>{Math.round(row.leads).toLocaleString()}</td>
       <td className={row.m.cplCls && 'cpa-' + row.m.cplCls}>{row.m.cpl === null ? '—' : fmt$(row.m.cpl, 2)}</td>
-      <td className={showSold ? '' : 'hidden'}>{Math.round(row.sold).toLocaleString()}</td>
-      <td className={H(row.m.cpaCls && 'cpa-' + row.m.cpaCls)}>{row.m.cpa === null ? '—' : fmt$(row.m.cpa)}</td>
-      <td className={H(row.m.closeCls && 'cpa-' + row.m.closeCls)}>{row.m.close === null ? '—' : pct(row.m.close)}</td>
+      <td className="sold-col">{Math.round(row.sold).toLocaleString()}</td>
+      <td className={'sold-col ' + (row.m.cpaCls && 'cpa-' + row.m.cpaCls)}>{row.m.cpa === null ? '—' : fmt$(row.m.cpa)}</td>
+      <td className={'sold-col ' + (row.m.closeCls && 'cpa-' + row.m.closeCls)}>{row.m.close === null ? '—' : pct(row.m.close)}</td>
+      <GrossTds gross={row.gross} spend={row.spend} />
     </tr>
   );
 }
@@ -218,7 +226,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
           </div>
           <div className="c4-rr-stats">
             <div><span className="c4-rr-k">Combined cost / lead</span><span className="c4-rr-v realloc-out-cpl">{preview.combinedCplBefore === null ? '—' : fmt$(preview.combinedCplBefore, 2)} → <b>{preview.combinedCplAfter === null ? '—' : fmt$(preview.combinedCplAfter, 2)}</b></span></div>
-            {showSold && <div><span className="c4-rr-k">Net sold / month</span><span className="c4-rr-v realloc-out-sold">{preview.netSoldMo >= 0 ? '+' : ''}{preview.netSoldMo.toFixed(1)}</span></div>}
+            <div className="sold-only"><span className="c4-rr-k">Net sold / month</span><span className="c4-rr-v realloc-out-sold">{preview.netSoldMo >= 0 ? '+' : ''}{preview.netSoldMo.toFixed(1)}</span></div>
           </div>
           <div className="c4-rr-foot">Leads scale at each channel&apos;s current cost per lead; projected sold applies the {pct(crmClose)} blended CRM close rate. A modeled estimate, not a guarantee.</div>
         </div>
@@ -239,7 +247,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
                   <th>Rec. change</th>
                   <th>Updated / mo</th>
                   <th>Leads / mo</th>
-                  {showSold && <th>Sold / mo</th>}
+                  <th className="sold-col">Sold / mo</th>
                   <th></th>
                 </tr>
               </thead>
@@ -251,7 +259,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
                     <td className="cpa-bad">{fmt$(r.change)}</td>
                     <td>{fmt$(r.updatedMonthly)}</td>
                     <td>{Math.round(r.leadsBeforeMo).toLocaleString()} → {Math.round(r.leadsAfterMo).toLocaleString()}</td>
-                    {showSold && <td>{r.soldBeforeMo.toFixed(1)} → {r.soldAfterMo.toFixed(1)}</td>}
+                    <td className="sold-col">{r.soldBeforeMo.toFixed(1)} → {r.soldAfterMo.toFixed(1)}</td>
                     <td className="c4-plan-actions">
                       <button className="c4-row-btn" onClick={() => editAlloc({ source: r.name, monthly: -r.change })} title="Edit">Edit</button>
                       <button className="c4-row-btn del" onClick={() => deleteAlloc(r.name)} title="Remove">Delete</button>
@@ -264,7 +272,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
                   <td className="cpa-good">+{fmt$(summary.c4Row.change)}</td>
                   <td>{fmt$(summary.c4Row.updatedMonthly)}</td>
                   <td>{Math.round(summary.c4Row.leadsBeforeMo).toLocaleString()} → {Math.round(summary.c4Row.leadsAfterMo).toLocaleString()}</td>
-                  {showSold && <td>{summary.c4Row.soldBeforeMo.toFixed(1)} → {summary.c4Row.soldAfterMo.toFixed(1)}</td>}
+                  <td className="sold-col">{summary.c4Row.soldBeforeMo.toFixed(1)} → {summary.c4Row.soldAfterMo.toFixed(1)}</td>
                   <td></td>
                 </tr>
                 <tr className="tot-row">
@@ -273,7 +281,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
                   <td>—</td>
                   <td>same total</td>
                   <td className={summary.netLeadsMo >= 0 ? 'cpa-good' : 'cpa-bad'}>{summary.netLeadsMo >= 0 ? '+' : ''}{Math.round(summary.netLeadsMo).toLocaleString()}/mo</td>
-                  {showSold && <td className={summary.netSoldMo >= 0 ? 'cpa-good' : 'cpa-bad'}>{summary.netSoldMo >= 0 ? '+' : ''}{summary.netSoldMo.toFixed(1)}/mo</td>}
+                  <td className={'sold-col ' + (summary.netSoldMo >= 0 ? 'cpa-good' : 'cpa-bad')}>{summary.netSoldMo >= 0 ? '+' : ''}{summary.netSoldMo.toFixed(1)}/mo</td>
                   <td></td>
                 </tr>
               </tbody>

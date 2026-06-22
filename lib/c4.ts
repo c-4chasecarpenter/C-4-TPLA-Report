@@ -71,25 +71,27 @@ export function reconcileC4Months(c4: C4Data, mkeys: string[]): C4Data {
 }
 
 // ---- blended CRM close rate (entire report: configured platforms + everything else) ----
-export interface CrmCloseDetail { good: number; sold: number; rate: number; }
+export interface CrmCloseDetail { good: number; sold: number; rate: number; gross: number; grossPerSold: number; }
 export function crmCloseDetail(d: ReportData): CrmCloseDetail {
-  let good = d.comb.good, sold = d.comb.sold;
-  for (const u of d.unmatchedSources) { good += u.leads; sold += u.sold; }
-  return { good, sold, rate: good > 0 ? (sold / good) * 100 : 0 };
+  let good = d.comb.good, sold = d.comb.sold, gross = d.comb.gross;
+  for (const u of d.unmatchedSources) { good += u.leads; sold += u.sold; gross += u.gross; }
+  return { good, sold, rate: good > 0 ? (sold / good) * 100 : 0, gross, grossPerSold: sold > 0 ? gross / sold : 0 };
 }
 export function crmCloseRate(d: ReportData): number {
   return crmCloseDetail(d).rate;
 }
 
 // ---- computed C-4 view ----
-export interface C4MonthMetrics { key: string; label: string; spend: number; leads: number; sold: number; }
+export interface C4MonthMetrics { key: string; label: string; spend: number; leads: number; sold: number; gross: number; }
 export interface C4TypeTotal { type: C4LeadType; leads: number; }
 
 export interface C4Computed {
   spend: number;
   leads: number;
   sold: number;       // projected (rounded)
+  gross: number;      // projected: sold × blended gross-per-sold
   crmClose: number;   // blended CRM close rate (%) used to project sold
+  grossPerSold: number; // blended CRM gross per sold unit, used to project C-4 gross
   metrics: RowMetrics;
   byMonth: C4MonthMetrics[];   // active months only
   byType: C4TypeTotal[];
@@ -108,19 +110,24 @@ function monthLeadTotal(m: C4MonthData | undefined, types: C4LeadType[]): number
 }
 
 export function computeC4(c4: C4Data, d: ReportData): C4Computed {
-  const crmClose = crmCloseRate(d);
+  const detail = crmCloseDetail(d);
+  const crmClose = detail.rate;
+  const grossPerSold = detail.grossPerSold;
   const active = c4ActiveMonthKeys(c4, d.mkeys);
   const labelOf = (k: string) => { const i = d.mkeys.indexOf(k); return i >= 0 ? d.mlabels[i] : k; };
 
   const byMonth: C4MonthMetrics[] = active.map((k) => {
     const m = c4.months[k];
     const leads = monthLeadTotal(m, c4.leadTypes);
-    return { key: k, label: labelOf(k), spend: m?.spend || 0, leads, sold: (leads * crmClose) / 100 };
+    const mSold = (leads * crmClose) / 100;
+    return { key: k, label: labelOf(k), spend: m?.spend || 0, leads, sold: mSold, gross: mSold * grossPerSold };
   });
 
   const spend = byMonth.reduce((s, x) => s + x.spend, 0);
   const leads = byMonth.reduce((s, x) => s + x.leads, 0);
-  const sold = Math.round((leads * crmClose) / 100);
+  const soldExact = (leads * crmClose) / 100;
+  const sold = Math.round(soldExact);
+  const gross = soldExact * grossPerSold;
 
   const byType: C4TypeTotal[] = c4.leadTypes
     .map((type) => {
@@ -134,7 +141,7 @@ export function computeC4(c4: C4Data, d: ReportData): C4Computed {
   const otherLeads = leads - websiteLeads;
 
   return {
-    spend, leads, sold, crmClose,
+    spend, leads, sold, gross, crmClose, grossPerSold,
     metrics: metricsRow(spend, leads, sold, d.t),
     byMonth, byType, websiteLeads, otherLeads,
     months: active.length, monthKeys: active,
@@ -145,7 +152,7 @@ export function computeC4(c4: C4Data, d: ReportData): C4Computed {
 // ---- comparison: C-4 vs each third party ----
 export interface CompareRow {
   name: string;
-  spend: number; leads: number; sold: number;
+  spend: number; leads: number; sold: number; gross: number;
   monthly: number;          // spend per active month for this channel
   m: RowMetrics;
   isC4?: boolean;
@@ -163,19 +170,19 @@ export interface C4Comparison {
 
 export function buildComparison(c4c: C4Computed, d: ReportData): C4Comparison {
   const c4: CompareRow = {
-    name: 'C-4 Analytics', spend: c4c.spend, leads: c4c.leads, sold: c4c.sold,
+    name: 'C-4 Analytics', spend: c4c.spend, leads: c4c.leads, sold: c4c.sold, gross: c4c.gross,
     monthly: c4c.months > 0 ? c4c.spend / c4c.months : 0,
     m: c4c.metrics, isC4: true,
   };
 
   const rows: CompareRow[] = d.data.map((s) => {
     const spend = s.monthly * d.months;
-    return { name: s.name, spend, leads: s.good, sold: s.sold, monthly: s.monthly, m: metricsRow(spend, s.good, s.sold, d.t) };
+    return { name: s.name, spend, leads: s.good, sold: s.sold, gross: s.gross, monthly: s.monthly, m: metricsRow(spend, s.good, s.sold, d.t) };
   });
 
   const thirdBlended: CompareRow = {
     name: 'All third parties (blended)',
-    spend: d.combPeriodSpend, leads: d.comb.good, sold: d.comb.sold,
+    spend: d.combPeriodSpend, leads: d.comb.good, sold: d.comb.sold, gross: d.comb.gross,
     monthly: d.combMonthlySpend,
     m: metricsRow(d.combPeriodSpend, d.comb.good, d.comb.sold, d.t),
   };

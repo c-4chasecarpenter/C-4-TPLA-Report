@@ -5,6 +5,25 @@ export const fmt$ = (n: number | null, dec = 0): string =>
 
 export const pct = (n: number | null): string => (n || 0).toFixed(1) + '%';
 
+// Signed dollars, e.g. net profit: -$1,200 rather than $-1,200.
+export const fmtSigned$ = (n: number | null, dec = 0): string => {
+  const v = n || 0;
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+};
+
+// Return on spend as a multiple, e.g. 4.2x.
+export const fmtMult = (n: number | null): string => (n === null || n === undefined || isNaN(n) ? '—' : n.toFixed(1) + 'x');
+
+export function roas(gross: number, spend: number): number | null {
+  return spend > 0 ? gross / spend : null;
+}
+
+// Profitability rating: media cost as a healthy fraction of gross.
+// >=3x gross-to-spend is green, <1.5x is red.
+export function profitCls(gross: number, spend: number): RatingClass {
+  return hiBetter(spend > 0 ? gross / spend : null, 3, 1.5);
+}
+
 // lower is better (cost metrics)
 export function loBetter(v: number | null, g: number, b: number): RatingClass {
   if (v === null || v === undefined || isNaN(v)) return '';
