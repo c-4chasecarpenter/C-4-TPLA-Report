@@ -575,72 +575,86 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     setShowDlPrompt(false);
   }
 
-  // Save as PDF: render the full report (all panels expanded, one tab per page)
-  // straight to a downloaded PDF — no browser print dialog.
+  // Save as PDF — no browser print dialog. Each tab (panel) is captured as its
+  // own image and added as its own page(s). Capturing the whole report in one
+  // html2canvas pass blew past the browser's max canvas height once the report
+  // grew (blank PDF); per-panel capture keeps every canvas well within limits.
   async function doDownloadPdf() {
     if (!reportRef.current || pdfBusy) return;
     setPdfBusy(true);
+    const container = document.createElement('div');
     try {
-      const html2pdf = (await import('html2pdf.js')).default as any;
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
 
       const clone = reportRef.current.cloneNode(true) as HTMLElement;
       clone.querySelector('.report-controls')?.remove();
       clone.querySelector('.dl-prompt')?.remove();
       clone.querySelector('.tabs')?.remove();
       clone.querySelectorAll('.c4-editbar').forEach((e) => e.remove());
+      // Buttons/controls that only work interactively — hide in the static snapshot.
+      clone.querySelectorAll<HTMLElement>('.c4-add-btn, .c4-plan-actions').forEach((e) => { e.style.display = 'none'; });
 
-      // Expand every panel; start each tab (after the first) on a new page.
+      // Expand every panel and flatten the two-column layout (rail stacks below).
       const panels = Array.from(clone.querySelectorAll<HTMLElement>('.panel'));
-      panels.forEach((p, i) => {
-        p.classList.add('active');
-        p.style.display = 'block';
-        if (i > 0) p.classList.add('pdf-break');
+      panels.forEach((p) => { p.classList.add('active'); p.style.display = 'block'; });
+      clone.querySelectorAll<HTMLElement>('.panel-body').forEach((b) => { b.style.display = 'block'; });
+      clone.querySelectorAll<HTMLElement>('.panel-rail').forEach((r) => {
+        r.style.position = 'static'; r.style.width = '100%'; r.style.maxHeight = 'none'; r.style.overflow = 'visible'; r.style.marginTop = '18px';
       });
 
-      // Flatten the two-column layout: html2canvas renders screen media, so the
-      // sticky/overflow rail would clip. Stack data then rail full-width per tab.
-      clone.querySelectorAll<HTMLElement>('.panel-body').forEach(b => { b.style.display = 'block'; });
-      clone.querySelectorAll<HTMLElement>('.panel-rail').forEach(r => {
-        r.style.position = 'static';
-        r.style.width = '100%';
-        r.style.maxHeight = 'none';
-        r.style.overflow = 'visible';
-        r.style.marginTop = '18px';
-      });
-
-      // Render container at real coordinates (0,0) so html2canvas captures it —
-      // a negative/off-screen left makes html2canvas grab empty space (blank PDF).
-      // Tuck it behind the page (z-index:-1) and at the document top so it's not seen.
-      const container = document.createElement('div');
+      // Offscreen render surface at a fixed width so layout is deterministic.
       container.className = 'wrap pdf-export';
-      container.style.cssText = 'width:1120px;background:#fff;position:absolute;left:0;top:0;z-index:-1;padding:0;pointer-events:none;';
-      container.innerHTML =
+      container.style.cssText = 'position:absolute;left:0;top:0;width:1120px;background:#fff;padding:0;z-index:-1;';
+
+      // Page 1 leads with the masthead + report header, then the first panel.
+      const cover = document.createElement('div');
+      cover.innerHTML =
         '<div class="mast" style="margin-bottom:20px;padding-bottom:16px;">' +
         '<img src="/logo-c4.png" alt="C-4 Analytics" class="mast-logo" />' +
         '<div class="mast-text"><div class="mast-eyebrow">C-4 Analytics</div>' +
         '<h1>Third Party Lead Source Report</h1></div></div>';
-      container.appendChild(clone);
+      const header = clone.querySelector('.report-header');
+      if (header) cover.appendChild(header);
+      if (panels[0]) cover.appendChild(panels[0]);
+
+      // One render block per page group: [cover + overview], then each remaining tab.
+      const blocks: HTMLElement[] = [cover, ...panels.slice(1)];
+      blocks.forEach((b) => container.appendChild(b));
       document.body.appendChild(container);
 
-      // Make sure web fonts are loaded and we capture from the top of the document.
       try { await (document as any).fonts?.ready; } catch { /* ignore */ }
-      window.scrollTo(0, 0);
+
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const usableW = pageW - margin * 2;
+      const usableH = pageH - margin * 2;
+
+      let firstPage = true;
+      for (const block of blocks) {
+        const canvas = await html2canvas(block, { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120, logging: false });
+        if (!canvas.width || !canvas.height) continue;
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgW = usableW;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        const pageCount = Math.max(1, Math.ceil(imgH / usableH));
+        for (let k = 0; k < pageCount; k++) {
+          if (!firstPage) pdf.addPage();
+          firstPage = false;
+          // Place the full image shifted up one usable-page per slice; jsPDF clips to the page.
+          pdf.addImage(imgData, 'JPEG', margin, margin - k * usableH, imgW, imgH, undefined, 'FAST');
+        }
+      }
 
       const safe = (dlFilename || 'TPLA-Report').replace(/[^a-z0-9\-_ .]/gi, '_');
-      try {
-        await html2pdf().set({
-          margin: [8, 8, 8, 8],
-          filename: `${safe}.pdf`,
-          image: { type: 'jpeg', quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: 1120, scrollX: 0, scrollY: 0, logging: false },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-          pagebreak: { mode: ['css', 'legacy'], before: '.pdf-break' },
-        }).from(container).save();
-      } finally {
-        document.body.removeChild(container);
-      }
+      pdf.save(`${safe}.pdf`);
       setShowDlPrompt(false);
     } finally {
+      if (container.parentNode) container.parentNode.removeChild(container);
       setPdfBusy(false);
     }
   }
