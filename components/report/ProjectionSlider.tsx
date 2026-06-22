@@ -27,7 +27,8 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
   const pctv = ((rate - 1) / (max - 1)) * 100;
 
   return (
-    <div className="proj">
+    <div className="proj" data-proj="1" data-spend={spend} data-good={good} data-cg={t.cpa.good} data-cb={t.cpa.bad}
+      data-curcpa={curCpa === null ? '' : curCpa} data-rate={rate}>
       <div className="proj-head">
         <div className="sub">Spend and leads stay fixed. Drag the slider to see what cost per sale becomes if the store closes these leads at a different rate.</div></div>
       <div className="proj-body">
@@ -39,7 +40,7 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
         </div>
         <div className="proj-arrow">&rarr;</div>
         <div className="proj-what">
-          <div className="pp-lab">If the store closed at <b style={{ color: 'var(--ink)' }}>{rate.toFixed(1)}%</b></div>
+          <div className="pp-lab">If the store closed at <b className="proj-out-rate" style={{ color: 'var(--ink)' }}>{rate.toFixed(1)}%</b></div>
           <div className="slider-wrap">
             <div className="c4-slider-row">
               <input type="range" className="proj-slider" min={1} max={max} step={0.5} value={rate}
@@ -52,8 +53,8 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
             </div>
             <div className="ticks"><span>1%</span><span>10%</span><span>20%</span><span>35%</span><span>{max}%</span></div>
           </div>
-          <div className={'pp-cpa' + (cls ? ' cpa-' + cls : '')}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>
-          <div className="pp-foot"><span>~{Math.round(sales).toLocaleString()}</span> sales projected<span className={'delta ' + delta.cls}>{delta.text}</span></div>
+          <div className={'pp-cpa proj-out-cpa' + (cls ? ' cpa-' + cls : '')}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>
+          <div className="pp-foot"><span className="proj-out-sales">~{Math.round(sales).toLocaleString()}</span> sales projected<span className={'delta proj-out-delta ' + delta.cls}>{delta.text}</span></div>
         </div>
       </div>
     </div>

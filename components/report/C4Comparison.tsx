@@ -180,10 +180,12 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
   }
 
   const existing = allocs.find((a) => a.source === source.name);
+  const sourcesData = JSON.stringify(candidates.map((r) => ({ name: r.name, monthly: r.monthly, cpl: r.m.cpl, close: r.leads > 0 ? r.sold / r.leads : 0 })));
 
   return (
     <>
-      <div className="card card-pad c4-realloc">
+      <div className="card card-pad c4-realloc" data-realloc="1" data-close={crmClose}
+        data-c4m={cmp.c4.monthly} data-c4cpl={cmp.c4.m.cpl ?? ''} data-src={source.name} data-amt={amt} data-sources={sourcesData}>
         <div className="c4-realloc-controls">
           <div className="c4-realloc-field">
             <label>Move monthly spend from</label>
@@ -192,7 +194,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
             </select>
           </div>
           <div className="c4-realloc-field grow">
-            <label>Reallocate to C-4 — drag or type ({fmt$(maxMonthly)}/mo available)</label>
+            <label>Reallocate to C-4 — drag or type (<span className="realloc-out-avail">{fmt$(maxMonthly)}</span>/mo available)</label>
             <div className="c4-slider-row">
               <input type="range" className="proj-slider" min={0} max={maxMonthly} step={Math.max(1, Math.round(maxMonthly / 100))} value={amt}
                 onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
@@ -209,13 +211,13 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
         </div>
 
         <div className="c4-realloc-result">
-          <div className={'c4-rr-hero ' + (leadUp ? 'is-good' : 'is-bad')}>
-            <span className="c4-rr-num">{leadUp ? '+' : ''}{Math.round(preview.netLeadsMo).toLocaleString()}</span>
-            <span className="c4-rr-lab">net leads / month from moving {fmt$(amt)}/mo out of {source.name}</span>
+          <div className={'c4-rr-hero realloc-out-hero ' + (leadUp ? 'is-good' : 'is-bad')}>
+            <span className="c4-rr-num realloc-out-net">{leadUp ? '+' : ''}{Math.round(preview.netLeadsMo).toLocaleString()}</span>
+            <span className="c4-rr-lab realloc-out-herolab">net leads / month from moving {fmt$(amt)}/mo out of {source.name}</span>
           </div>
           <div className="c4-rr-stats">
-            <div><span className="c4-rr-k">Combined cost / lead</span><span className="c4-rr-v">{preview.combinedCplBefore === null ? '—' : fmt$(preview.combinedCplBefore, 2)} → <b>{preview.combinedCplAfter === null ? '—' : fmt$(preview.combinedCplAfter, 2)}</b></span></div>
-            {showSold && <div><span className="c4-rr-k">Net sold / month</span><span className="c4-rr-v">{preview.netSoldMo >= 0 ? '+' : ''}{preview.netSoldMo.toFixed(1)}</span></div>}
+            <div><span className="c4-rr-k">Combined cost / lead</span><span className="c4-rr-v realloc-out-cpl">{preview.combinedCplBefore === null ? '—' : fmt$(preview.combinedCplBefore, 2)} → <b>{preview.combinedCplAfter === null ? '—' : fmt$(preview.combinedCplAfter, 2)}</b></span></div>
+            {showSold && <div><span className="c4-rr-k">Net sold / month</span><span className="c4-rr-v realloc-out-sold">{preview.netSoldMo >= 0 ? '+' : ''}{preview.netSoldMo.toFixed(1)}</span></div>}
           </div>
           <div className="c4-rr-foot">Leads scale at each channel&apos;s current cost per lead; projected sold applies the {pct(crmClose)} blended CRM close rate. A modeled estimate, not a guarantee.</div>
         </div>

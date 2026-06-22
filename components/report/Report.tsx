@@ -486,6 +486,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       // The sticky tab bar stays put when not printing. Panel show/hide is left to
       // the original .panel / .panel.active rules so the injected script can toggle.
       '.report-controls,.dl-prompt{display:none!important;}',
+      // Buttons that mutate state can't persist in a static file; sliders below stay live.
+      '.c4-add-btn,.c4-row-btn{display:none!important;}',
       '.tabs{position:static;cursor:default;}',
       '.tab{cursor:pointer;}',
       'body{background:var(--paper);}',
@@ -509,6 +511,52 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       '}',
       "tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab-index'));});});",
       'show(0);',
+      // Re-implement the interactive sliders (closing-rate projection + reallocation) for the standalone file.
+      `
+      function c4money(n){return '$'+Math.round(n).toLocaleString('en-US');}
+      function c4money2(n){return '$'+(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+      function c4lo(v,g,b){if(v==null||isNaN(v))return '';return v<g?'good':(v<=b?'ok':'bad');}
+      [].slice.call(document.querySelectorAll('.proj[data-proj]')).forEach(function(p){
+        var spend=+p.getAttribute('data-spend'),good=+p.getAttribute('data-good'),cg=+p.getAttribute('data-cg'),cb=+p.getAttribute('data-cb');
+        var cc=p.getAttribute('data-curcpa'),curcpa=cc===''?null:+cc;
+        var range=p.querySelector('.proj-slider'),num=p.querySelector('.c4-slider-input input');
+        var mn=+range.min||1,mx=+range.max||50;
+        var rb=p.querySelector('.proj-out-rate'),cpaEl=p.querySelector('.proj-out-cpa'),sEl=p.querySelector('.proj-out-sales'),dEl=p.querySelector('.proj-out-delta');
+        function r(rate){rate=Math.min(mx,Math.max(mn,rate));var sales=good*(rate/100),cpa=sales>0?spend/sales:null,cls=cpa==null?'':c4lo(cpa,cg,cb);
+          if(rb)rb.textContent=rate.toFixed(1)+'%';
+          if(cpaEl){cpaEl.textContent=cpa==null?'—':c4money(cpa)+' / sale';cpaEl.className='pp-cpa proj-out-cpa'+(cls?' cpa-'+cls:'');}
+          if(sEl)sEl.textContent='~'+Math.round(sales).toLocaleString();
+          if(dEl){var d=(cpa!=null&&curcpa!=null)?cpa-curcpa:null,dc='eq',tx='no current sales to compare';if(d!=null){if(Math.abs(d)<1){dc='eq';tx='matches current';}else if(d<0){dc='dn';tx=c4money(-d)+' cheaper per sale';}else{dc='up';tx=c4money(d)+' more per sale';}}dEl.className='delta proj-out-delta '+dc;dEl.textContent=tx;}
+          var pv=((rate-mn)/(mx-mn))*100;range.style.background='linear-gradient(90deg, var(--orange) 0%, var(--orange) '+pv+'%, var(--line) '+pv+'%, var(--line) 100%)';
+          if(+range.value!==rate)range.value=rate;if(num&&+num.value!==rate)num.value=rate;}
+        range.addEventListener('input',function(){r(+range.value);});
+        if(num)num.addEventListener('input',function(){r(+num.value);});
+        r(+(p.getAttribute('data-rate')||range.value||10));
+      });
+      [].slice.call(document.querySelectorAll('.c4-realloc[data-realloc]')).forEach(function(p){
+        var close=+p.getAttribute('data-close'),c4m=+p.getAttribute('data-c4m'),c4cplA=p.getAttribute('data-c4cpl'),c4cpl=c4cplA===''?null:+c4cplA;
+        var sources={};(JSON.parse(p.getAttribute('data-sources')||'[]')).forEach(function(s){sources[s.name]=s;});
+        var sel=p.querySelector('select'),range=p.querySelector('.proj-slider'),num=p.querySelector('.c4-slider-input input');
+        if(!sel||!range)return;
+        var availEl=p.querySelector('.realloc-out-avail'),hero=p.querySelector('.realloc-out-hero'),netEl=p.querySelector('.realloc-out-net'),labEl=p.querySelector('.realloc-out-herolab'),cplEl=p.querySelector('.realloc-out-cpl'),soldEl=p.querySelector('.realloc-out-sold');
+        function render(name,amt){var s=sources[name];if(!s)return;amt=Math.max(0,Math.min(amt,s.monthly));
+          var c4lb=c4cpl?c4m/c4cpl:0,c4la=c4cpl?(c4m+amt)/c4cpl:0,slb=s.cpl?s.monthly/s.cpl:0,sla=s.cpl?(s.monthly-amt)/s.cpl:0;
+          var netL=(c4la-c4lb)+(sla-slb),netS=((c4la-c4lb)*close/100)+((sla-slb)*s.close),sp=c4m+s.monthly,lb=c4lb+slb,la=c4la+sla;
+          var cbv=lb>0?sp/lb:null,cav=la>0?sp/la:null,up=netL>=0;
+          if(availEl)availEl.textContent=c4money(s.monthly);
+          if(hero)hero.className='c4-rr-hero realloc-out-hero '+(up?'is-good':'is-bad');
+          if(netEl)netEl.textContent=(up?'+':'')+Math.round(netL).toLocaleString();
+          if(labEl)labEl.textContent='net leads / month from moving '+c4money(amt)+'/mo out of '+name;
+          if(cplEl)cplEl.innerHTML=(cbv==null?'—':c4money2(cbv))+' → <b>'+(cav==null?'—':c4money2(cav))+'</b>';
+          if(soldEl)soldEl.textContent=(netS>=0?'+':'')+netS.toFixed(1);
+          var pv=s.monthly>0?(amt/s.monthly)*100:0;range.style.background='linear-gradient(90deg, var(--orange) 0%, var(--orange) '+pv+'%, var(--line) '+pv+'%, var(--line) 100%)';
+          range.max=s.monthly;if(num)num.max=s.monthly;if(+range.value!==amt)range.value=amt;if(num&&+num.value!==amt)num.value=amt;}
+        sel.addEventListener('change',function(){var s=sources[sel.value];render(sel.value,s?Math.round(s.monthly/2):0);});
+        range.addEventListener('input',function(){render(sel.value,+range.value);});
+        if(num)num.addEventListener('input',function(){render(sel.value,+num.value);});
+        var ds=p.getAttribute('data-src')||sel.value;sel.value=ds;render(ds,+(p.getAttribute('data-amt')||0));
+      });
+      `,
       '})();',
       '</script>',
       '</body>',
