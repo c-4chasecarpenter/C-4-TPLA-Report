@@ -41,9 +41,15 @@ export default function ProjectionSlider({ spend, good, sold, t, label }: { spen
         <div className="proj-what">
           <div className="pp-lab">If the store closed at <b style={{ color: 'var(--ink)' }}>{rate.toFixed(1)}%</b></div>
           <div className="slider-wrap">
-            <input type="range" className="proj-slider" min={1} max={max} step={0.5} value={rate}
-              onChange={(e) => setRate(parseFloat(e.target.value))}
-              style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+            <div className="c4-slider-row">
+              <input type="range" className="proj-slider" min={1} max={max} step={0.5} value={rate}
+                onChange={(e) => setRate(parseFloat(e.target.value))}
+                style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+              <div className="pct-wrap c4-slider-input">
+                <input type="number" min={1} max={max} step={0.5} value={rate}
+                  onChange={(e) => setRate(Math.min(max, Math.max(1, parseFloat(e.target.value) || 1)))} />
+              </div>
+            </div>
             <div className="ticks"><span>1%</span><span>10%</span><span>20%</span><span>35%</span><span>{max}%</span></div>
           </div>
           <div className={'pp-cpa' + (cls ? ' cpa-' + cls : '')}>{cpa === null ? '\u2014' : fmt$(cpa) + ' / sale'}</div>

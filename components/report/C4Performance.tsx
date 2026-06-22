@@ -61,6 +61,9 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
   function setBudget(v: number) {
     onChange({ ...c4, budget: v });
   }
+  function setRange(which: 'start' | 'end', v: string) {
+    onChange({ ...c4, range: { ...c4.range, [which]: v || null } });
+  }
 
   const numCell = (val: number, onSet: (v: number) => void, dollar = false) =>
     editMode ? (
@@ -80,7 +83,7 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
 
       <div className="panel-head">
         <div className="h">C-4 Analytics Performance</div>
-        <div className="spend-tag"><b>{fmt$(c.spend)}</b> tracked spend · {d.months} mo</div>
+        <div className="spend-tag"><b>{fmt$(c.spend)}</b> tracked spend · {c.months} mo active</div>
       </div>
 
       {!c.hasData && !editMode && (
@@ -89,7 +92,7 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
 
       {/* KPI tiles — mirror the Overview tab */}
       <div className="kpis">
-        <Kpi label="Tracked spend" val={fmt$(c.spend)} foot={`${d.months} month${d.months > 1 ? 's' : ''}`} />
+        <Kpi label="Tracked spend" val={fmt$(c.spend)} foot={`${c.months} active month${c.months === 1 ? '' : 's'}`} />
         <Kpi label="Good leads" val={Math.round(c.leads).toLocaleString()} foot={`${websiteTypes.reduce((s, x) => s + x.leads, 0).toLocaleString()} from website`} />
         <Kpi label="Cost / good lead" val={c.metrics.cpl === null ? '—' : fmt$(c.metrics.cpl, 2)} foot="C-4 channels" cls={c.metrics.cplCls} />
         <Kpi label="Vehicles sold" val={c.sold.toLocaleString()} foot="projected" sold={!showSold} />
@@ -102,6 +105,31 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
           Sold and cost-per-sold are <b>projected</b>: C-4 drives traffic but the CRM doesn&apos;t track the sale back to us, so
           C-4&apos;s {Math.round(c.leads).toLocaleString()} leads are closed at the entire report&apos;s blended CRM rate of <b>{pct(c.crmClose)}</b>.
         </div>
+      )}
+
+      {/* C-4 active date range — C-4 often starts partway through the report period */}
+      {editMode && d.mkeys[0] !== 'all' && (
+        <div className="c4-range">
+          <span className="c4-range-lab">C-4 active date range <span className="hint">limit to the months C-4 was actually running</span></span>
+          <div className="c4-range-fields">
+            <label>Start
+              <select value={c4.range.start ?? ''} onChange={(e) => setRange('start', e.target.value)}>
+                <option value="">First month</option>
+                {d.mkeys.map((k, i) => <option key={k} value={k}>{d.mlabels[i]}</option>)}
+              </select>
+            </label>
+            <span className="c4-range-arrow">→</span>
+            <label>End
+              <select value={c4.range.end ?? ''} onChange={(e) => setRange('end', e.target.value)}>
+                <option value="">Last month</option>
+                {d.mkeys.map((k, i) => <option key={k} value={k}>{d.mlabels[i]}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
+      {!editMode && c.monthKeys.length > 0 && c.monthKeys.length < d.mkeys.length && (
+        <div className="c4-range-note">C-4 active range: <b>{c.byMonth[0].label} – {c.byMonth[c.byMonth.length - 1].label}</b> ({c.months} of {d.months} report months).</div>
       )}
 
       {/* Monthly budget — reference only, separate from the true monthly spend below */}
@@ -120,8 +148,8 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
           </div>
           {c4.budget > 0 && (
             <div className="c4-budget-compare">
-              Budgeted <b>{fmt$(c4.budget * d.months)}</b> over {d.months} mo · actual tracked <b>{fmt$(c.spend)}</b>
-              {' '}({c.spend <= c4.budget * d.months ? fmt$(c4.budget * d.months - c.spend) + ' under' : fmt$(c.spend - c4.budget * d.months) + ' over'})
+              Budgeted <b>{fmt$(c4.budget * c.months)}</b> over {c.months} active mo · actual tracked <b>{fmt$(c.spend)}</b>
+              {' '}({c.spend <= c4.budget * c.months ? fmt$(c4.budget * c.months - c.spend) + ' under' : fmt$(c.spend - c4.budget * c.months) + ' over'})
             </div>
           )}
         </div>
@@ -193,14 +221,14 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
             </tr>
           </thead>
           <tbody>
-            {d.mkeys.map((mk, i) => {
+            {c.byMonth.map((bm) => {
+              const mk = bm.key;
               const m = c4.months[mk] ?? { spend: 0, leads: {} };
-              const bm = computed.byMonth[i];
               const soldR = Math.round(bm.sold);
               const r = metricsRow(bm.spend, bm.leads, soldR, t);
               return (
                 <tr key={mk}>
-                  <td className="l">{d.mlabels[i]}</td>
+                  <td className="l">{bm.label}</td>
                   <td>{numCell(m.spend || 0, (v) => setSpend(mk, v), true)}</td>
                   {c4.leadTypes.map((lt) => (
                     <td key={lt.key} className="c4-type-col">{numCell(m.leads?.[lt.key] ?? 0, (v) => setLead(mk, lt.key, v))}</td>
@@ -216,7 +244,7 @@ export default function C4Performance({ c4, computed, d, showSold, editMode, onT
               <td className="l">Period total</td>
               <td>{fmt$(c.spend)}</td>
               {c4.leadTypes.map((lt) => {
-                const tot = d.mkeys.reduce((s, mk) => s + (c4.months[mk]?.leads?.[lt.key] ?? 0), 0);
+                const tot = c.monthKeys.reduce((s, mk) => s + (c4.months[mk]?.leads?.[lt.key] ?? 0), 0);
                 return <td key={lt.key} className="c4-type-col">{tot.toLocaleString()}</td>;
               })}
               <td><b>{Math.round(c.leads).toLocaleString()}</b></td>

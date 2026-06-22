@@ -27,6 +27,15 @@ export interface C4Data {
   leadTypes: C4LeadType[];
   months: Record<string, C4MonthData>; // keyed by report month key (ReportData.mkeys)
   budget: number;                      // monthly budget — reference only, not the true spend
+  range: { start: string | null; end: string | null }; // C-4 active month keys; null = open
+}
+
+// C-4 may run a different (shorter) window than the third parties — e.g. paid
+// media starting partway through the report period. Month keys are 'YYYY-MM',
+// which sort chronologically, so a lexical range filter works.
+export function c4ActiveMonthKeys(c4: C4Data, mkeys: string[]): string[] {
+  const s = c4.range?.start, e = c4.range?.end;
+  return mkeys.filter((k) => (!s || k >= s) && (!e || k <= e));
 }
 
 // Anything prefixed `asc_` is a lead from the dealer website.
@@ -47,7 +56,7 @@ export const DEFAULT_C4_LEAD_TYPES: C4LeadType[] = [
 export function emptyC4Data(mkeys: string[]): C4Data {
   const months: Record<string, C4MonthData> = {};
   for (const k of mkeys) months[k] = { spend: 0, leads: {} };
-  return { leadTypes: DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t })), months, budget: 0 };
+  return { leadTypes: DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t })), months, budget: 0, range: { start: null, end: null } };
 }
 
 // Ensure a loaded C4Data covers exactly the report's current month keys.
@@ -55,7 +64,10 @@ export function reconcileC4Months(c4: C4Data, mkeys: string[]): C4Data {
   const months: Record<string, C4MonthData> = {};
   for (const k of mkeys) months[k] = c4.months[k] ?? { spend: 0, leads: {} };
   const leadTypes = c4.leadTypes?.length ? c4.leadTypes : DEFAULT_C4_LEAD_TYPES.map((t) => ({ ...t }));
-  return { leadTypes, months, budget: c4.budget ?? 0 };
+  // Drop a saved range bound that no longer exists in the current month axis.
+  const start = c4.range?.start && mkeys.includes(c4.range.start) ? c4.range.start : null;
+  const end = c4.range?.end && mkeys.includes(c4.range.end) ? c4.range.end : null;
+  return { leadTypes, months, budget: c4.budget ?? 0, range: { start, end } };
 }
 
 // ---- blended CRM close rate (entire report: configured platforms + everything else) ----
@@ -70,7 +82,7 @@ export function crmCloseRate(d: ReportData): number {
 }
 
 // ---- computed C-4 view ----
-export interface C4MonthMetrics { key: string; spend: number; leads: number; sold: number; }
+export interface C4MonthMetrics { key: string; label: string; spend: number; leads: number; sold: number; }
 export interface C4TypeTotal { type: C4LeadType; leads: number; }
 
 export interface C4Computed {
@@ -79,10 +91,12 @@ export interface C4Computed {
   sold: number;       // projected (rounded)
   crmClose: number;   // blended CRM close rate (%) used to project sold
   metrics: RowMetrics;
-  byMonth: C4MonthMetrics[];
+  byMonth: C4MonthMetrics[];   // active months only
   byType: C4TypeTotal[];
   websiteLeads: number;
   otherLeads: number;
+  months: number;              // count of active C-4 months
+  monthKeys: string[];         // active month keys
   hasData: boolean;
 }
 
@@ -95,11 +109,13 @@ function monthLeadTotal(m: C4MonthData | undefined, types: C4LeadType[]): number
 
 export function computeC4(c4: C4Data, d: ReportData): C4Computed {
   const crmClose = crmCloseRate(d);
+  const active = c4ActiveMonthKeys(c4, d.mkeys);
+  const labelOf = (k: string) => { const i = d.mkeys.indexOf(k); return i >= 0 ? d.mlabels[i] : k; };
 
-  const byMonth: C4MonthMetrics[] = d.mkeys.map((k) => {
+  const byMonth: C4MonthMetrics[] = active.map((k) => {
     const m = c4.months[k];
     const leads = monthLeadTotal(m, c4.leadTypes);
-    return { key: k, spend: m?.spend || 0, leads, sold: (leads * crmClose) / 100 };
+    return { key: k, label: labelOf(k), spend: m?.spend || 0, leads, sold: (leads * crmClose) / 100 };
   });
 
   const spend = byMonth.reduce((s, x) => s + x.spend, 0);
@@ -109,7 +125,7 @@ export function computeC4(c4: C4Data, d: ReportData): C4Computed {
   const byType: C4TypeTotal[] = c4.leadTypes
     .map((type) => {
       let n = 0;
-      for (const k of d.mkeys) n += c4.months[k]?.leads?.[type.key] ?? 0;
+      for (const k of active) n += c4.months[k]?.leads?.[type.key] ?? 0;
       return { type, leads: n };
     })
     .sort((a, b) => b.leads - a.leads);
@@ -121,6 +137,7 @@ export function computeC4(c4: C4Data, d: ReportData): C4Computed {
     spend, leads, sold, crmClose,
     metrics: metricsRow(spend, leads, sold, d.t),
     byMonth, byType, websiteLeads, otherLeads,
+    months: active.length, monthKeys: active,
     hasData: spend > 0 || leads > 0,
   };
 }
@@ -129,6 +146,7 @@ export function computeC4(c4: C4Data, d: ReportData): C4Computed {
 export interface CompareRow {
   name: string;
   spend: number; leads: number; sold: number;
+  monthly: number;          // spend per active month for this channel
   m: RowMetrics;
   isC4?: boolean;
 }
@@ -146,17 +164,19 @@ export interface C4Comparison {
 export function buildComparison(c4c: C4Computed, d: ReportData): C4Comparison {
   const c4: CompareRow = {
     name: 'C-4 Analytics', spend: c4c.spend, leads: c4c.leads, sold: c4c.sold,
+    monthly: c4c.months > 0 ? c4c.spend / c4c.months : 0,
     m: c4c.metrics, isC4: true,
   };
 
   const rows: CompareRow[] = d.data.map((s) => {
     const spend = s.monthly * d.months;
-    return { name: s.name, spend, leads: s.good, sold: s.sold, m: metricsRow(spend, s.good, s.sold, d.t) };
+    return { name: s.name, spend, leads: s.good, sold: s.sold, monthly: s.monthly, m: metricsRow(spend, s.good, s.sold, d.t) };
   });
 
   const thirdBlended: CompareRow = {
     name: 'All third parties (blended)',
     spend: d.combPeriodSpend, leads: d.comb.good, sold: d.comb.sold,
+    monthly: d.combMonthlySpend,
     m: metricsRow(d.combPeriodSpend, d.comb.good, d.comb.sold, d.t),
   };
 
@@ -199,10 +219,9 @@ export interface AllocSummary {
   combinedCplAfter: number | null;
 }
 
-export function summarizeAllocations(allocs: Allocation[], cmp: C4Comparison, months: number, crmClose: number): AllocSummary {
-  const m = Math.max(1, months);
+export function summarizeAllocations(allocs: Allocation[], cmp: C4Comparison, crmClose: number): AllocSummary {
   const c4Cpl = cmp.c4.m.cpl;
-  const c4Monthly = cmp.c4.spend / m;
+  const c4Monthly = cmp.c4.monthly;
   const c4LeadsBeforeMo = c4Cpl ? c4Monthly / c4Cpl : 0;
 
   let totalMoved = 0;
@@ -210,7 +229,7 @@ export function summarizeAllocations(allocs: Allocation[], cmp: C4Comparison, mo
   for (const a of allocs) {
     const src = cmp.rows.find((r) => r.name === a.source);
     if (!src) continue;
-    const curMo = src.spend / m;
+    const curMo = src.monthly;
     const moved = Math.max(0, Math.min(a.monthly, curMo));
     totalMoved += moved;
     const cpl = src.m.cpl;

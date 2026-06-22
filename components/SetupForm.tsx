@@ -7,9 +7,22 @@ import { fmt$ } from '@/lib/format';
 
 const SEED = ['CarGurus', 'Autotrader', 'Cars.com', 'Carfax'];
 
+// Format a yyyy-mm-dd value (from <input type="date">) without UTC drift.
+function fmtDate(s: string): string {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return '';
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function rangeLabel(start: string, end: string): string {
+  const a = fmtDate(start), b = fmtDate(end);
+  return a && b ? `${a} – ${b}` : a || b;
+}
+
 export default function SetupForm({ onGenerate, initialData }: { onGenerate: (r: ReportData) => void; initialData?: ReportData | null }) {
   const [deal, setDeal] = useState(initialData?.meta.deal ?? '');
   const [timeframe, setTimeframe] = useState(initialData?.meta.timeframe ?? '');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState(initialData?.meta.description ?? '');
   const [sources, setSources] = useState<SourceEntry[]>(
     initialData?.data.map(s => ({ name: s.name, monthly: s.monthly })) ?? SEED.map((name) => ({ name, monthly: 0 }))
@@ -123,7 +136,11 @@ export default function SetupForm({ onGenerate, initialData }: { onGenerate: (r:
         <div className="card-pad">
           <div className="grid grid-2">
             <div><label>Dealership name</label><input type="text" value={deal} onChange={(e) => setDeal(e.target.value)} placeholder="e.g. Burien Chevrolet" /></div>
-            <div><label>Timeframe</label><input type="text" value={timeframe} onChange={(e) => setTimeframe(e.target.value)} placeholder="e.g. Jan to Jun 2026" /></div>
+            <div><label>Timeframe <span className="hint">auto-fills from the dates below</span></label><input type="text" value={timeframe} onChange={(e) => setTimeframe(e.target.value)} placeholder="e.g. Jan to Jun 2026" /></div>
+          </div>
+          <div className="grid grid-2" style={{ marginTop: 18 }}>
+            <div><label>Start date</label><input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); const l = rangeLabel(e.target.value, endDate); if (l) setTimeframe(l); }} /></div>
+            <div><label>End date</label><input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); const l = rangeLabel(startDate, e.target.value); if (l) setTimeframe(l); }} /></div>
           </div>
           <div style={{ marginTop: 18 }}>
             <label>Description <span className="hint">optional context for the report header</span></label>

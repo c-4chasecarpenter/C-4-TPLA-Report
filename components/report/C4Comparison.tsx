@@ -16,7 +16,6 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
   const cmp = buildComparison(computed, d);
   const close = crmCloseDetail(d);
   const H = (cls: string) => (showSold ? cls : cls + ' hidden');
-  const perMo = (period: number) => period / Math.max(1, d.months);
 
   return (
     <>
@@ -69,7 +68,7 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
                 <tr>
                   <th className="l">Channel</th>
                   <th>Spend / mo</th>
-                  <th>Spend ({d.months}mo)</th>
+                  <th>Spend (period)</th>
                   <th>Leads</th>
                   <th>Cost / lead</th>
                   <th className={showSold ? '' : 'hidden'}>Sold</th>
@@ -78,11 +77,11 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
                 </tr>
               </thead>
               <tbody>
-                <CmpRow row={cmp.c4} showSold={showSold} perMo={perMo} highlight />
-                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} showSold={showSold} perMo={perMo} />)}
+                <CmpRow row={cmp.c4} showSold={showSold} highlight />
+                {cmp.rows.map((r) => <CmpRow key={r.name} row={r} showSold={showSold} />)}
                 <tr className="tot-row">
                   <td className="l">{cmp.thirdBlended.name}</td>
-                  <td>{fmt$(perMo(cmp.thirdBlended.spend))}</td>
+                  <td>{fmt$(cmp.thirdBlended.monthly)}</td>
                   <td>{fmt$(cmp.thirdBlended.spend)}</td>
                   <td>{cmp.thirdBlended.leads.toLocaleString()}</td>
                   <td className={cmp.thirdBlended.m.cplCls && 'cpa-' + cmp.thirdBlended.m.cplCls}>{cmp.thirdBlended.m.cpl === null ? '—' : fmt$(cmp.thirdBlended.m.cpl, 2)}</td>
@@ -103,7 +102,7 @@ export default function C4Comparison({ computed, d, showSold, editMode, onToggle
 
           {/* Reallocation projector */}
           <div className="sec-label"><h3>Reallocation projector</h3><span className="note">Model moving monthly spend from a third party into C-4 campaigns</span></div>
-          <Reallocator cmp={cmp} months={d.months} crmClose={close.rate} showSold={showSold} />
+          <Reallocator cmp={cmp} crmClose={close.rate} showSold={showSold} />
         </>
       )}
     </>
@@ -120,7 +119,7 @@ function ScoreCard({ label, big, sub, good }: { label: string; big: string; sub:
   );
 }
 
-function CmpRow({ row, showSold, perMo, highlight }: { row: Cmp['c4']; showSold: boolean; perMo: (n: number) => number; highlight?: boolean }) {
+function CmpRow({ row, showSold, highlight }: { row: Cmp['c4']; showSold: boolean; highlight?: boolean }) {
   const H = (cls: string) => (showSold ? cls : cls + ' hidden');
   return (
     <tr className={highlight ? 'c4-row' : ''}>
@@ -131,7 +130,7 @@ function CmpRow({ row, showSold, perMo, highlight }: { row: Cmp['c4']; showSold:
           {highlight && <span className="wintag">C-4</span>}
         </div>
       </td>
-      <td>{fmt$(perMo(row.spend))}</td>
+      <td>{fmt$(row.monthly)}</td>
       <td>{fmt$(row.spend)}</td>
       <td>{Math.round(row.leads).toLocaleString()}</td>
       <td className={row.m.cplCls && 'cpa-' + row.m.cplCls}>{row.m.cpl === null ? '—' : fmt$(row.m.cpl, 2)}</td>
@@ -142,13 +141,12 @@ function CmpRow({ row, showSold, perMo, highlight }: { row: Cmp['c4']; showSold:
   );
 }
 
-function Reallocator({ cmp, months, crmClose, showSold }: { cmp: Cmp; months: number; crmClose: number; showSold: boolean }) {
-  const candidates = cmp.rows.filter((r) => r.spend > 0 && r.m.cpl !== null);
-  const monthlyOf = (r: Cmp['rows'][number]) => r.spend / Math.max(1, months);
+function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; showSold: boolean }) {
+  const candidates = cmp.rows.filter((r) => r.monthly > 0 && r.m.cpl !== null);
 
   const [srcName, setSrcName] = useState(candidates[0]?.name ?? '');
   const source = candidates.find((r) => r.name === srcName) ?? candidates[0];
-  const maxMonthly = source ? Math.round(monthlyOf(source)) : 0;
+  const maxMonthly = source ? Math.round(source.monthly) : 0;
   const [amount, setAmount] = useState(maxMonthly ? Math.round(maxMonthly / 2) : 0);
   const [allocs, setAllocs] = useState<Allocation[]>([]);
 
@@ -159,11 +157,11 @@ function Reallocator({ cmp, months, crmClose, showSold }: { cmp: Cmp; months: nu
   const pctv = maxMonthly > 0 ? (amt / maxMonthly) * 100 : 0;
 
   // Live preview of the single allocation currently dialed in.
-  const preview = summarizeAllocations([{ source: source.name, monthly: amt }], cmp, months, crmClose);
+  const preview = summarizeAllocations([{ source: source.name, monthly: amt }], cmp, crmClose);
   const leadUp = preview.netLeadsMo >= 0;
 
   // Committed allocations.
-  const summary = summarizeAllocations(allocs, cmp, months, crmClose);
+  const summary = summarizeAllocations(allocs, cmp, crmClose);
 
   function addAlloc() {
     if (amt <= 0) return;
@@ -189,15 +187,21 @@ function Reallocator({ cmp, months, crmClose, showSold }: { cmp: Cmp; months: nu
         <div className="c4-realloc-controls">
           <div className="c4-realloc-field">
             <label>Move monthly spend from</label>
-            <select value={srcName} onChange={(e) => { setSrcName(e.target.value); const s = candidates.find((r) => r.name === e.target.value); setAmount(s ? Math.round(monthlyOf(s) / 2) : 0); }}>
+            <select value={srcName} onChange={(e) => { setSrcName(e.target.value); const s = candidates.find((r) => r.name === e.target.value); setAmount(s ? Math.round(s.monthly / 2) : 0); }}>
               {candidates.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
             </select>
           </div>
           <div className="c4-realloc-field grow">
-            <label>Reallocate <b>{fmt$(amt)}/mo</b> of {fmt$(maxMonthly)}/mo to C-4</label>
-            <input type="range" className="proj-slider" min={0} max={maxMonthly} step={Math.max(1, Math.round(maxMonthly / 100))} value={amt}
-              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-              style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+            <label>Reallocate to C-4 — drag or type ({fmt$(maxMonthly)}/mo available)</label>
+            <div className="c4-slider-row">
+              <input type="range" className="proj-slider" min={0} max={maxMonthly} step={Math.max(1, Math.round(maxMonthly / 100))} value={amt}
+                onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                style={{ background: `linear-gradient(90deg, var(--orange) 0%, var(--orange) ${pctv}%, var(--line) ${pctv}%, var(--line) 100%)` }} />
+              <div className="money-wrap c4-slider-input">
+                <input type="number" min={0} max={maxMonthly} value={amt} onChange={(e) => setAmount(Math.min(maxMonthly, Math.max(0, parseFloat(e.target.value) || 0)))} />
+                <span className="month-tag">/ mo</span>
+              </div>
+            </div>
           </div>
           <button className="btn btn-primary c4-add-btn" onClick={addAlloc} disabled={amt <= 0}>
             {existing ? 'Update' : 'Add'} reallocation
@@ -272,6 +276,27 @@ function Reallocator({ cmp, months, crmClose, showSold }: { cmp: Cmp; months: nu
           </div>
           <div className="c4-table-note">
             Same total budget, redistributed: combined cost per lead {summary.combinedCplBefore === null ? '—' : fmt$(summary.combinedCplBefore, 2)} → <b>{summary.combinedCplAfter === null ? '—' : fmt$(summary.combinedCplAfter, 2)}</b> across the affected channels.
+          </div>
+
+          {/* Updated C-4 investment summary */}
+          <div className="sec-label"><h3>Updated C-4 investment</h3><span className="note">What C-4 monthly spend becomes if this plan is approved</span></div>
+          <div className="card card-pad">
+            <div className="c4-invest">
+              <div className="c4-invest-item">
+                <div className="c4-invest-lab">Current monthly</div>
+                <div className="c4-invest-val">{fmt$(summary.c4Row.currentMonthly)}</div>
+              </div>
+              <div className="c4-invest-op">+</div>
+              <div className="c4-invest-item">
+                <div className="c4-invest-lab">Recommended reallocation</div>
+                <div className="c4-invest-val cpa-good">+{fmt$(summary.totalMovedMonthly)}</div>
+              </div>
+              <div className="c4-invest-op">=</div>
+              <div className="c4-invest-item total">
+                <div className="c4-invest-lab">Updated monthly investment</div>
+                <div className="c4-invest-val">{fmt$(summary.c4Row.updatedMonthly)}</div>
+              </div>
+            </div>
           </div>
         </>
       )}
