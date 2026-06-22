@@ -17,6 +17,16 @@ export function LegendTable({ t, sold }: { t: Thresholds; sold: boolean }) {
   );
 }
 
+export function Kpi({ label, val, foot, cls, sold }: { label: string; val: string; foot: string; cls?: string; sold?: boolean }) {
+  return (
+    <div className={'kpi' + (sold ? ' hidden' : '')}>
+      <div className="k-label">{label}</div>
+      <div className={'k-val ' + (cls ? 'cpa-' + cls : '')}>{val}</div>
+      <div className="k-foot">{foot}</div>
+    </div>
+  );
+}
+
 export function Tiles({ spend, good, sold, t, showSold }: { spend: number; good: number; sold: number; t: Thresholds; showSold: boolean }) {
   const r = metricsRow(spend, good, sold, t);
   const cls = (c: string) => 't-val ' + c;

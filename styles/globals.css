@@ -869,3 +869,85 @@ td.best .mk { font-size: 9px; font-weight: 700; color: var(--cpa-good); text-tra
 .spend-cell-input::-webkit-outer-spin-button,
 .spend-cell-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .spend-cell-input[type=number] { -moz-appearance: textfield; }
+
+/* ===== C-4 ANALYTICS TABS ===== */
+.tab-c4.active { background: var(--ink); }
+.dot-c4 { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--orange); }
+.tab-c4.active .dot-c4 { box-shadow: 0 0 0 2px rgba(255,255,255,.5); }
+
+.c4-editbar { display: flex; align-items: center; gap: 16px; padding: 12px 16px; background: var(--orange-tint); border: 1px solid var(--orange-tint-border); border-radius: var(--radius); margin-bottom: 18px; flex-wrap: wrap; }
+.c4-edit-hint { font-size: 13px; color: var(--ink-soft); }
+.c4-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 14px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); margin-bottom: 18px; }
+.c4-note { font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); background: var(--line-soft); border-left: 3px solid var(--orange); border-radius: 4px; padding: 10px 14px; margin: 4px 0 6px; }
+.c4-note b { color: var(--ink); }
+
+/* Lead breakdown */
+.c4-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.c4-bd-empty { font-size: 13px; color: var(--muted); padding: 8px 0; }
+@media (max-width: 860px) { .c4-breakdown { grid-template-columns: 1fr; } }
+
+/* Lead type editor */
+.c4-types-head, .c4-types-row { display: grid; grid-template-columns: 1.3fr 1.3fr 130px 40px; gap: 10px; align-items: center; }
+.c4-types-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.c4-types-row { margin-bottom: 8px; }
+.c4-types-row input { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+.c4-types-row input:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(253,89,0,.1); }
+.c4-src-badge { font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 20px; text-align: center; }
+.c4-src-badge.web { background: var(--orange-tint); color: var(--orange); }
+.c4-src-badge.other { background: var(--line-soft); color: var(--ink-soft); }
+
+/* Wide monthly entry table */
+.c4-mtab-wrap { overflow-x: auto; }
+.c4-mtab { min-width: 720px; }
+.c4-mtab .c4-type-col { white-space: nowrap; }
+.c4-mtab .spend-cell-input { width: 84px; padding: 5px 8px; }
+
+/* Scoreboard */
+.c4-scoreboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 6px 0 8px; }
+@media (max-width: 860px) { .c4-scoreboard { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .c4-scoreboard { grid-template-columns: 1fr; } }
+.c4-score { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.c4-score.is-good { border-top-color: var(--cpa-good); }
+.c4-score.is-bad { border-top-color: var(--cpa-bad); }
+.c4-score-lab { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.c4-score-big { font-size: 24px; font-weight: 800; color: var(--ink); margin: 6px 0 4px; line-height: 1.1; }
+.c4-score.is-good .c4-score-big { color: var(--cpa-good); }
+.c4-score.is-bad .c4-score-big { color: var(--cpa-bad); }
+.c4-score-sub { font-size: 12px; color: var(--ink-soft); }
+
+/* Highlighted C-4 row in comparison table */
+.cmp .c4-row { background: var(--orange-tint); }
+.cmp .c4-row td { font-weight: 600; }
+
+/* Reallocation projector */
+.c4-realloc-controls { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 22px; }
+.c4-realloc-field { display: flex; flex-direction: column; gap: 8px; }
+.c4-realloc-field.grow { flex: 1; min-width: 240px; }
+.c4-realloc-field label { font-size: 12.5px; color: var(--ink-soft); }
+.c4-realloc-field label b { color: var(--ink); }
+.c4-realloc-field select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px; min-width: 180px; }
+.c4-realloc-field select:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(253,89,0,.1); }
+.c4-realloc-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
+@media (max-width: 700px) { .c4-realloc-grid { grid-template-columns: 1fr; } .c4-realloc-arrow { display: none; } }
+.c4-realloc-arrow { font-size: 26px; color: var(--muted); text-align: center; }
+.c4-realloc-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.c4-realloc-card.accent { border-color: var(--orange); background: var(--orange-tint); }
+.c4-rc-title { font-size: 13px; font-weight: 800; color: var(--ink); margin-bottom: 12px; }
+.c4-rc-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); padding: 5px 0; border-top: 1px solid var(--line-soft); }
+.c4-rc-row:first-of-type { border-top: none; }
+.c4-rc-row b { color: var(--ink); }
+.c4-rc-row em { font-style: normal; font-weight: 700; margin-left: 4px; }
+.c4-rc-row em.up { color: var(--cpa-good); }
+.c4-rc-row em.dn { color: var(--cpa-bad); }
+.c4-realloc-result { margin-top: 20px; padding-top: 18px; border-top: 2px solid var(--ink); }
+.c4-rr-hero { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.c4-rr-num { font-size: 34px; font-weight: 800; line-height: 1; }
+.c4-rr-hero.is-good .c4-rr-num { color: var(--cpa-good); }
+.c4-rr-hero.is-bad .c4-rr-num { color: var(--cpa-bad); }
+.c4-rr-lab { font-size: 14px; color: var(--ink-soft); }
+.c4-rr-stats { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; }
+.c4-rr-stats > div { display: flex; flex-direction: column; gap: 3px; }
+.c4-rr-k { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.c4-rr-v { font-size: 15px; color: var(--ink-soft); }
+.c4-rr-v b { color: var(--ink); }
+.c4-rr-foot { font-size: 11.5px; color: var(--muted); margin-top: 14px; line-height: 1.5; }

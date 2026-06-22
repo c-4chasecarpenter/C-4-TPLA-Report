@@ -1,0 +1,206 @@
+'use client';
+import { ReportData } from '@/lib/types';
+import { fmt$, pct, metricsRow } from '@/lib/format';
+import { Kpi } from './parts';
+import { C4Data, C4Computed, C4LeadType, isWebsiteKey } from '@/lib/c4';
+
+// Shared edit toggle shown at the top of both C-4 tabs.
+export function C4EditBar({ editMode, onToggle, onSave }: { editMode: boolean; onToggle: (v: boolean) => void; onSave: () => void }) {
+  return (
+    <div className="c4-editbar">
+      <label className="switch">
+        <input type="checkbox" checked={editMode} onChange={(e) => onToggle(e.target.checked)} />
+        <span className="track" />Edit C-4 data
+      </label>
+      {editMode
+        ? <button className="btn btn-primary" onClick={onSave}>Save &amp; lock</button>
+        : <span className="c4-edit-hint">Toggle on to enter spend and leads. Saved to this browser.</span>}
+    </div>
+  );
+}
+
+export default function C4Performance({ c4, computed, d, showSold, editMode, onToggle, onSave, onChange }: {
+  c4: C4Data;
+  computed: C4Computed;
+  d: ReportData;
+  showSold: boolean;
+  editMode: boolean;
+  onToggle: (v: boolean) => void;
+  onSave: () => void;
+  onChange: (c4: C4Data) => void;
+}) {
+  const t = d.t;
+  const c = computed;
+  const H = (cls: string) => (showSold ? cls : cls + ' hidden');
+
+  // ---- mutations ----
+  function setSpend(mk: string, v: number) {
+    const months = { ...c4.months, [mk]: { ...(c4.months[mk] ?? { spend: 0, leads: {} }), spend: v } };
+    onChange({ ...c4, months });
+  }
+  function setLead(mk: string, key: string, v: number) {
+    const m = c4.months[mk] ?? { spend: 0, leads: {} };
+    const months = { ...c4.months, [mk]: { ...m, leads: { ...m.leads, [key]: v } } };
+    onChange({ ...c4, months });
+  }
+  function updateType(i: number, patch: Partial<C4LeadType>) {
+    const leadTypes = c4.leadTypes.map((lt, idx) => {
+      if (idx !== i) return lt;
+      const next = { ...lt, ...patch };
+      if (patch.key !== undefined) next.website = isWebsiteKey(patch.key); // re-derive website flag from key
+      return next;
+    });
+    onChange({ ...c4, leadTypes });
+  }
+  function addType() {
+    onChange({ ...c4, leadTypes: [...c4.leadTypes, { key: `lead_${c4.leadTypes.length + 1}`, label: 'New lead type', website: false }] });
+  }
+  function removeType(i: number) {
+    onChange({ ...c4, leadTypes: c4.leadTypes.filter((_, idx) => idx !== i) });
+  }
+
+  const numCell = (val: number, onSet: (v: number) => void, dollar = false) =>
+    editMode ? (
+      <input type="number" className="spend-cell-input" min={0} placeholder={dollar ? '0' : '—'}
+        value={val > 0 ? val : ''} onChange={(e) => onSet(parseFloat(e.target.value) || 0)} />
+    ) : (
+      <span>{dollar ? fmt$(val) : val.toLocaleString()}</span>
+    );
+
+  const websiteTypes = computed.byType.filter((x) => x.type.website);
+  const otherTypes = computed.byType.filter((x) => !x.type.website);
+  const maxTypeLeads = Math.max(1, ...computed.byType.map((x) => x.leads));
+
+  return (
+    <>
+      <C4EditBar editMode={editMode} onToggle={onToggle} onSave={onSave} />
+
+      <div className="panel-head">
+        <div className="h">C-4 Analytics Performance</div>
+        <div className="spend-tag"><b>{fmt$(c.spend)}</b> tracked spend · {d.months} mo</div>
+      </div>
+
+      {!c.hasData && !editMode && (
+        <div className="c4-empty">No C-4 data yet. Toggle <b>Edit C-4 data</b> above to enter monthly spend and leads.</div>
+      )}
+
+      {/* KPI tiles — mirror the Overview tab */}
+      <div className="kpis">
+        <Kpi label="Tracked spend" val={fmt$(c.spend)} foot={`${d.months} month${d.months > 1 ? 's' : ''}`} />
+        <Kpi label="Good leads" val={Math.round(c.leads).toLocaleString()} foot={`${websiteTypes.reduce((s, x) => s + x.leads, 0).toLocaleString()} from website`} />
+        <Kpi label="Cost / good lead" val={c.metrics.cpl === null ? '—' : fmt$(c.metrics.cpl, 2)} foot="C-4 channels" cls={c.metrics.cplCls} />
+        <Kpi label="Vehicles sold" val={c.sold.toLocaleString()} foot="projected" sold={!showSold} />
+        <Kpi label="Cost / sold" val={c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)} foot="projected" cls={c.metrics.cpaCls} sold={!showSold} />
+        <Kpi label="Closing rate" val={c.crmClose > 0 ? pct(c.crmClose) : '—'} foot="blended CRM avg" cls={c.metrics.closeCls} sold={!showSold} />
+      </div>
+
+      {showSold && (
+        <div className="c4-note">
+          Sold and cost-per-sold are <b>projected</b>: C-4 drives traffic but the CRM doesn&apos;t track the sale back to us, so
+          C-4&apos;s {Math.round(c.leads).toLocaleString()} leads are closed at the entire report&apos;s blended CRM rate of <b>{pct(c.crmClose)}</b>.
+        </div>
+      )}
+
+      {/* Lead breakdown by type */}
+      <div className="sec-label"><h3>Lead breakdown</h3><span className="note">All C-4 leads by type — anything tracked as <code>asc_</code> is a website lead</span></div>
+      <div className="card card-pad">
+        <div className="c4-breakdown">
+          <div className="c4-bd-group">
+            <div className="pbar-gtitle">Website leads <span className="pbar-hint">{websiteTypes.reduce((s, x) => s + x.leads, 0).toLocaleString()} total</span></div>
+            {websiteTypes.length === 0 && <div className="c4-bd-empty">No website lead types.</div>}
+            {websiteTypes.map((x) => (
+              <div key={x.type.key} className="pbar-row">
+                <div className="pbar-name">{x.type.label}</div>
+                <div className="pbar-track"><div className="pbar-fill pbar-neutral" style={{ width: `${(x.leads / maxTypeLeads) * 100}%` }} /></div>
+                <div className="pbar-num">{x.leads.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+          <div className="c4-bd-group">
+            <div className="pbar-gtitle">Google &amp; other leads <span className="pbar-hint">{otherTypes.reduce((s, x) => s + x.leads, 0).toLocaleString()} total</span></div>
+            {otherTypes.length === 0 && <div className="c4-bd-empty">No other lead types.</div>}
+            {otherTypes.map((x) => (
+              <div key={x.type.key} className="pbar-row">
+                <div className="pbar-name">{x.type.label}</div>
+                <div className="pbar-track"><div className="pbar-fill pbar-neutral" style={{ width: `${(x.leads / maxTypeLeads) * 100}%` }} /></div>
+                <div className="pbar-num">{x.leads.toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Lead type catalog editor (edit mode only) */}
+      {editMode && (
+        <>
+          <div className="sec-label"><h3>Lead types</h3><span className="note">Rename, add, or remove the conversions you track. Keys starting with <code>asc_</code> count as website leads.</span></div>
+          <div className="card card-pad">
+            <div className="c4-types">
+              <div className="c4-types-head"><span>Label</span><span>Tracking key</span><span>Source</span><span /></div>
+              {c4.leadTypes.map((lt, i) => (
+                <div className="c4-types-row" key={i}>
+                  <input type="text" value={lt.label} onChange={(e) => updateType(i, { label: e.target.value })} placeholder="Web Phone Call" />
+                  <input type="text" value={lt.key} onChange={(e) => updateType(i, { key: e.target.value })} placeholder="asc_click_to_call" />
+                  <span className={'c4-src-badge ' + (lt.website ? 'web' : 'other')}>{lt.website ? 'Website' : 'Google / other'}</span>
+                  <button className="rm" title="Remove" onClick={() => removeType(i)}>&times;</button>
+                </div>
+              ))}
+              <button className="btn btn-add" onClick={addType}>+ Add lead type</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Month by month: spend + per-type leads */}
+      <div className="sec-label"><h3>By month</h3><span className="note">Spend and leads per month{editMode ? ' — enter values in the cells' : ''}</span></div>
+      <div className="card c4-mtab-wrap">
+        <table className="mtab c4-mtab">
+          <thead>
+            <tr>
+              <th className="l">Month</th>
+              <th>Spend</th>
+              {c4.leadTypes.map((lt) => <th key={lt.key} className="c4-type-col">{lt.label}</th>)}
+              <th>Leads</th>
+              <th className={showSold ? '' : 'hidden'}>Sold</th>
+              <th>Cost / lead</th>
+              <th className={showSold ? '' : 'hidden'}>Cost / sold</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.mkeys.map((mk, i) => {
+              const m = c4.months[mk] ?? { spend: 0, leads: {} };
+              const bm = computed.byMonth[i];
+              const soldR = Math.round(bm.sold);
+              const r = metricsRow(bm.spend, bm.leads, soldR, t);
+              return (
+                <tr key={mk}>
+                  <td className="l">{d.mlabels[i]}</td>
+                  <td>{numCell(m.spend || 0, (v) => setSpend(mk, v), true)}</td>
+                  {c4.leadTypes.map((lt) => (
+                    <td key={lt.key} className="c4-type-col">{numCell(m.leads?.[lt.key] ?? 0, (v) => setLead(mk, lt.key, v))}</td>
+                  ))}
+                  <td><b>{bm.leads.toLocaleString()}</b></td>
+                  <td className={showSold ? '' : 'hidden'}>{soldR.toLocaleString()}</td>
+                  <td className={r.cplCls && 'cpa-' + r.cplCls}>{r.cpl === null ? '—' : fmt$(r.cpl, 2)}</td>
+                  <td className={H(r.cpaCls && 'cpa-' + r.cpaCls)}>{r.cpa === null ? '—' : fmt$(r.cpa)}</td>
+                </tr>
+              );
+            })}
+            <tr className="tot-row">
+              <td className="l">Period total</td>
+              <td>{fmt$(c.spend)}</td>
+              {c4.leadTypes.map((lt) => {
+                const tot = d.mkeys.reduce((s, mk) => s + (c4.months[mk]?.leads?.[lt.key] ?? 0), 0);
+                return <td key={lt.key} className="c4-type-col">{tot.toLocaleString()}</td>;
+              })}
+              <td><b>{Math.round(c.leads).toLocaleString()}</b></td>
+              <td className={showSold ? '' : 'hidden'}>{c.sold.toLocaleString()}</td>
+              <td className={c.metrics.cplCls && 'cpa-' + c.metrics.cplCls}>{c.metrics.cpl === null ? '—' : fmt$(c.metrics.cpl, 2)}</td>
+              <td className={H(c.metrics.cpaCls && 'cpa-' + c.metrics.cpaCls)}>{c.metrics.cpa === null ? '—' : fmt$(c.metrics.cpa)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}

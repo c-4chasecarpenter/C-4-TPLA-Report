@@ -1,10 +1,13 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { ReportData, PlatformAgg, Thresholds } from '@/lib/types';
 import { fmt$, pct, metricsRow } from '@/lib/format';
-import { Tiles, Verdict, MonthlyTable, Chart } from './parts';
+import { Tiles, Verdict, MonthlyTable, Chart, Kpi } from './parts';
 import ProjectionSlider from './ProjectionSlider';
+import C4Performance from './C4Performance';
+import C4Comparison from './C4Comparison';
+import { C4Data, emptyC4Data, loadC4, saveC4, computeC4, buildComparison, c4Recommendations } from '@/lib/c4';
 
 // ---- Key takeaways ----
 type Takeaway = { type: 'scale' | 'cut' | 'watch' | 'info'; headline: string; detail: string };
@@ -367,6 +370,21 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
   const reportRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
 
+  // ---- C-4 Analytics data (manually entered, persisted to this browser) ----
+  const [c4, setC4] = useState<C4Data>(() => emptyC4Data(d.mkeys));
+  const [c4Editing, setC4Editing] = useState(false);
+  useEffect(() => {
+    setC4(loadC4(d.meta, d.mkeys) ?? emptyC4Data(d.mkeys));
+    setC4Editing(false);
+  }, [d.meta.deal, d.meta.timeframe, d.mkeys.join(',')]);
+
+  const c4computed = computeC4(c4, d);
+  const c4cmp = buildComparison(c4computed, d);
+  const c4recs = c4Recommendations(c4computed, c4cmp, d);
+
+  function lockC4() { saveC4(d.meta, c4); setC4Editing(false); }
+  function toggleC4(v: boolean) { setC4Editing(v); if (!v) saveC4(d.meta, c4); }
+
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const cr = metricsRow(d.combPeriodSpend, d.comb.good, d.comb.sold, t);
 
@@ -406,6 +424,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
     const clone = reportRef.current.cloneNode(true) as HTMLElement;
     clone.querySelector('.report-controls')?.remove();
     clone.querySelector('.dl-prompt')?.remove();
+    clone.querySelectorAll('.c4-editbar').forEach((e) => e.remove());
 
     // Make the tab navigation work in the standalone file (no React/event handlers
     // survive cloneNode). Index each tab + panel in document order, strip any inline
@@ -520,6 +539,7 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       clone.querySelector('.report-controls')?.remove();
       clone.querySelector('.dl-prompt')?.remove();
       clone.querySelector('.tabs')?.remove();
+      clone.querySelectorAll('.c4-editbar').forEach((e) => e.remove());
 
       // Expand every panel; start each tab (after the first) on a new page.
       const panels = Array.from(clone.querySelectorAll<HTMLElement>('.panel'));
@@ -632,6 +652,8 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       {/* Platform tabs */}
       <div className="tabs">
         <button className={'tab' + (tab === 'overview' ? ' active' : '')} onClick={() => setTab('overview')}>Overview</button>
+        <button className={'tab tab-c4' + (tab === 'c4perf' ? ' active' : '')} onClick={() => setTab('c4perf')}><span className="dot dot-c4" />C-4 Performance</button>
+        <button className={'tab tab-c4' + (tab === 'c4cmp' ? ' active' : '')} onClick={() => setTab('c4cmp')}><span className="dot dot-c4" />C-4 vs 3rd Parties</button>
         {d.data.map((s, i) => {
           const ps = s.monthly * d.months;
           const r = metricsRow(ps, s.good, s.sold, t);
@@ -769,6 +791,28 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         </div>{/* /panel-body */}
       </div>
 
+      {/* ── C-4 PERFORMANCE ── */}
+      <div className={'panel' + (tab === 'c4perf' ? ' active' : '')}>
+        <div className="panel-body">
+          <div className="panel-content">
+            <C4Performance c4={c4} computed={c4computed} d={d} showSold={showSold}
+              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} onChange={setC4} />
+          </div>{/* /panel-content */}
+          <Rail t={t} showSold={showSold} takeaways={c4recs} note="C-4 performance vs the field" />
+        </div>{/* /panel-body */}
+      </div>
+
+      {/* ── C-4 vs THIRD PARTIES ── */}
+      <div className={'panel' + (tab === 'c4cmp' ? ' active' : '')}>
+        <div className="panel-body">
+          <div className="panel-content">
+            <C4Comparison computed={c4computed} d={d} showSold={showSold}
+              editMode={c4Editing} onToggle={toggleC4} onSave={lockC4} />
+          </div>{/* /panel-content */}
+          <Rail t={t} showSold={showSold} takeaways={[]} note="" />
+        </div>{/* /panel-body */}
+      </div>
+
       {/* ── PER PLATFORM ── */}
       {d.data.map((s, i) => {
         const ptw = generatePlatformTakeaways(s, d, showSold);
@@ -799,16 +843,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function Kpi({ label, val, foot, cls, sold }: { label: string; val: string; foot: string; cls?: string; sold?: boolean }) {
-  return (
-    <div className={'kpi' + (sold ? ' hidden' : '')}>
-      <div className="k-label">{label}</div>
-      <div className={'k-val ' + (cls ? 'cpa-' + cls : '')}>{val}</div>
-      <div className="k-foot">{foot}</div>
     </div>
   );
 }
