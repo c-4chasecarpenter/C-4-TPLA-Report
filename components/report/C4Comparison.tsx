@@ -185,7 +185,8 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
   return (
     <>
       <div className="card card-pad c4-realloc" data-realloc="1" data-close={crmClose}
-        data-c4m={cmp.c4.monthly} data-c4cpl={cmp.c4.m.cpl ?? ''} data-src={source.name} data-amt={amt} data-sources={sourcesData}>
+        data-c4m={cmp.c4.monthly} data-c4cpl={cmp.c4.m.cpl ?? ''} data-src={source.name} data-amt={amt}
+        data-sources={sourcesData} data-sold={showSold ? '1' : ''} data-allocs={JSON.stringify(allocs)}>
         <div className="c4-realloc-controls">
           <div className="c4-realloc-field">
             <label>Move monthly spend from</label>
@@ -223,7 +224,9 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
         </div>
       </div>
 
-      {/* Committed reallocation plan */}
+      {/* Committed reallocation plan — wrapped in a stable mount so the downloaded
+          HTML's vanilla script can rebuild it as rows are added/edited/removed. */}
+      <div className="c4-plan-region">
       {allocs.length > 0 && (
         <>
           <div className="sec-label"><h3>Reallocation plan</h3><span className="note">Recommended monthly budget shifts — edit or remove any row</span></div>
@@ -302,6 +305,7 @@ function Reallocator({ cmp, crmClose, showSold }: { cmp: Cmp; crmClose: number; 
           </div>
         </>
       )}
+      </div>{/* /c4-plan-region */}
     </>
   );
 }

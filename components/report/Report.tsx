@@ -486,8 +486,6 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       // The sticky tab bar stays put when not printing. Panel show/hide is left to
       // the original .panel / .panel.active rules so the injected script can toggle.
       '.report-controls,.dl-prompt{display:none!important;}',
-      // Buttons that mutate state can't persist in a static file; sliders below stay live.
-      '.c4-add-btn,.c4-row-btn{display:none!important;}',
       '.tabs{position:static;cursor:default;}',
       '.tab{cursor:pointer;}',
       'body{background:var(--paper);}',
@@ -533,13 +531,22 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
         if(num)num.addEventListener('input',function(){r(+num.value);});
         r(+(p.getAttribute('data-rate')||range.value||10));
       });
+      function c4esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+      function c4leads(n){return Math.round(n).toLocaleString();}
       [].slice.call(document.querySelectorAll('.c4-realloc[data-realloc]')).forEach(function(p){
         var close=+p.getAttribute('data-close'),c4m=+p.getAttribute('data-c4m'),c4cplA=p.getAttribute('data-c4cpl'),c4cpl=c4cplA===''?null:+c4cplA;
+        var showSold=p.getAttribute('data-sold')==='1';
         var sources={};(JSON.parse(p.getAttribute('data-sources')||'[]')).forEach(function(s){sources[s.name]=s;});
+        var allocs=JSON.parse(p.getAttribute('data-allocs')||'[]');
         var sel=p.querySelector('select'),range=p.querySelector('.proj-slider'),num=p.querySelector('.c4-slider-input input');
         if(!sel||!range)return;
+        var addBtn=p.querySelector('.c4-add-btn');
+        var region=(p.parentNode||document).querySelector('.c4-plan-region')||document.querySelector('.c4-plan-region');
         var availEl=p.querySelector('.realloc-out-avail'),hero=p.querySelector('.realloc-out-hero'),netEl=p.querySelector('.realloc-out-net'),labEl=p.querySelector('.realloc-out-herolab'),cplEl=p.querySelector('.realloc-out-cpl'),soldEl=p.querySelector('.realloc-out-sold');
-        function render(name,amt){var s=sources[name];if(!s)return;amt=Math.max(0,Math.min(amt,s.monthly));
+        function curAmt(){return Math.max(0,Math.min(+ (num?num.value:range.value)||0,(sources[sel.value]||{}).monthly||0));}
+        function setAmt(v){var s=sources[sel.value];v=Math.max(0,Math.min(v,s?s.monthly:0));if(+range.value!==v)range.value=v;if(num&&+num.value!==v)num.value=v;}
+        function updateAddLabel(){if(!addBtn)return;var ex=allocs.some(function(a){return a.source===sel.value;});addBtn.textContent=(ex?'Update':'Add')+' reallocation';}
+        function renderPreview(name,amt){var s=sources[name];if(!s)return;amt=Math.max(0,Math.min(amt,s.monthly));
           var c4lb=c4cpl?c4m/c4cpl:0,c4la=c4cpl?(c4m+amt)/c4cpl:0,slb=s.cpl?s.monthly/s.cpl:0,sla=s.cpl?(s.monthly-amt)/s.cpl:0;
           var netL=(c4la-c4lb)+(sla-slb),netS=((c4la-c4lb)*close/100)+((sla-slb)*s.close),sp=c4m+s.monthly,lb=c4lb+slb,la=c4la+sla;
           var cbv=lb>0?sp/lb:null,cav=la>0?sp/la:null,up=netL>=0;
@@ -551,10 +558,31 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
           if(soldEl)soldEl.textContent=(netS>=0?'+':'')+netS.toFixed(1);
           var pv=s.monthly>0?(amt/s.monthly)*100:0;range.style.background='linear-gradient(90deg, var(--orange) 0%, var(--orange) '+pv+'%, var(--line) '+pv+'%, var(--line) 100%)';
           range.max=s.monthly;if(num)num.max=s.monthly;if(+range.value!==amt)range.value=amt;if(num&&+num.value!==amt)num.value=amt;}
-        sel.addEventListener('change',function(){var s=sources[sel.value];render(sel.value,s?Math.round(s.monthly/2):0);});
-        range.addEventListener('input',function(){render(sel.value,+range.value);});
-        if(num)num.addEventListener('input',function(){render(sel.value,+num.value);});
-        var ds=p.getAttribute('data-src')||sel.value;sel.value=ds;render(ds,+(p.getAttribute('data-amt')||0));
+        function summarize(){var totalMoved=0,sr=[];allocs.forEach(function(a){var s=sources[a.source];if(!s)return;var cur=s.monthly,moved=Math.max(0,Math.min(a.monthly,cur));totalMoved+=moved;var lb=s.cpl?cur/s.cpl:0,upd=cur-moved,la=s.cpl?upd/s.cpl:0;sr.push({name:s.name,cur:cur,change:-moved,upd:upd,lb:lb,la:la,sb:lb*s.close,sa:la*s.close});});
+          var c4lb=c4cpl?c4m/c4cpl:0,c4upd=c4m+totalMoved,c4la=c4cpl?c4upd/c4cpl:0;
+          var c4r={cur:c4m,change:totalMoved,upd:c4upd,lb:c4lb,la:c4la,sb:c4lb*close/100,sa:c4la*close/100};
+          var netL=(c4r.la-c4r.lb)+sr.reduce(function(x,r){return x+(r.la-r.lb);},0);
+          var netS=(c4r.sa-c4r.sb)+sr.reduce(function(x,r){return x+(r.sa-r.sb);},0);
+          var sp=c4m+sr.reduce(function(x,r){return x+r.cur;},0),lbT=c4r.lb+sr.reduce(function(x,r){return x+r.lb;},0),laT=c4r.la+sr.reduce(function(x,r){return x+r.la;},0);
+          return {sr:sr,c4:c4r,moved:totalMoved,netL:netL,netS:netS,cb:lbT>0?sp/lbT:null,ca:laT>0?sp/laT:null};}
+        function renderPlan(){if(!region)return;if(!allocs.length){region.innerHTML='';return;}var s=summarize(),sc=showSold;
+          var head='<tr><th class="l">Channel</th><th>Current / mo</th><th>Rec. change</th><th>Updated / mo</th><th>Leads / mo</th>'+(sc?'<th>Sold / mo</th>':'')+'<th></th></tr>';
+          var rows='';s.sr.forEach(function(r){rows+='<tr><td class="l"><b>'+c4esc(r.name)+'</b></td><td>'+c4money(r.cur)+'</td><td class="cpa-bad">'+c4money(r.change)+'</td><td>'+c4money(r.upd)+'</td><td>'+c4leads(r.lb)+' → '+c4leads(r.la)+'</td>'+(sc?'<td>'+r.sb.toFixed(1)+' → '+r.sa.toFixed(1)+'</td>':'')+'<td class="c4-plan-actions"><button class="c4-row-btn" data-edit="'+c4esc(r.name)+'">Edit</button><button class="c4-row-btn del" data-del="'+c4esc(r.name)+'">Delete</button></td></tr>';});
+          var c4r='<tr class="c4-row"><td class="l"><b>C-4 Analytics</b> <span class="wintag">C-4</span></td><td>'+c4money(s.c4.cur)+'</td><td class="cpa-good">+'+c4money(s.c4.change)+'</td><td>'+c4money(s.c4.upd)+'</td><td>'+c4leads(s.c4.lb)+' → '+c4leads(s.c4.la)+'</td>'+(sc?'<td>'+s.c4.sb.toFixed(1)+' → '+s.c4.sa.toFixed(1)+'</td>':'')+'<td></td></tr>';
+          var net='<tr class="tot-row"><td class="l">Net impact</td><td>'+c4money(s.moved)+' moved</td><td>—</td><td>same total</td><td class="'+(s.netL>=0?'cpa-good':'cpa-bad')+'">'+(s.netL>=0?'+':'')+c4leads(s.netL)+'/mo</td>'+(sc?'<td class="'+(s.netS>=0?'cpa-good':'cpa-bad')+'">'+(s.netS>=0?'+':'')+s.netS.toFixed(1)+'/mo</td>':'')+'<td></td></tr>';
+          var html='<div class="sec-label"><h3>Reallocation plan</h3><span class="note">Recommended monthly budget shifts — edit or remove any row</span></div>'
+            +'<div class="card"><table class="cmp c4-plan"><thead>'+head+'</thead><tbody>'+rows+c4r+net+'</tbody></table></div>'
+            +'<div class="c4-table-note">Same total budget, redistributed: combined cost per lead '+(s.cb==null?'—':c4money2(s.cb))+' → <b>'+(s.ca==null?'—':c4money2(s.ca))+'</b> across the affected channels.</div>'
+            +'<div class="sec-label"><h3>Updated C-4 investment</h3><span class="note">What C-4 monthly spend becomes if this plan is approved</span></div>'
+            +'<div class="card card-pad"><div class="c4-invest"><div class="c4-invest-item"><div class="c4-invest-lab">Current monthly</div><div class="c4-invest-val">'+c4money(s.c4.cur)+'</div></div><div class="c4-invest-op">+</div><div class="c4-invest-item"><div class="c4-invest-lab">Recommended reallocation</div><div class="c4-invest-val cpa-good">+'+c4money(s.moved)+'</div></div><div class="c4-invest-op">=</div><div class="c4-invest-item total"><div class="c4-invest-lab">Updated monthly investment</div><div class="c4-invest-val">'+c4money(s.c4.upd)+'</div></div></div></div>';
+          region.innerHTML=html;
+          [].slice.call(region.querySelectorAll('[data-del]')).forEach(function(b){b.addEventListener('click',function(){var n=b.getAttribute('data-del');allocs=allocs.filter(function(a){return a.source!==n;});renderPlan();updateAddLabel();});});
+          [].slice.call(region.querySelectorAll('[data-edit]')).forEach(function(b){b.addEventListener('click',function(){var n=b.getAttribute('data-edit'),a=allocs.filter(function(x){return x.source===n;})[0];allocs=allocs.filter(function(x){return x.source!==n;});if(a){sel.value=n;setAmt(a.monthly);renderPreview(n,a.monthly);}renderPlan();updateAddLabel();});});}
+        sel.addEventListener('change',function(){var s=sources[sel.value];var a=Math.round((s?s.monthly:0)/2);setAmt(a);renderPreview(sel.value,a);updateAddLabel();});
+        range.addEventListener('input',function(){renderPreview(sel.value,+range.value);});
+        if(num)num.addEventListener('input',function(){renderPreview(sel.value,+num.value);});
+        if(addBtn)addBtn.addEventListener('click',function(){var n=sel.value,amt=curAmt();if(amt<=0)return;allocs=allocs.filter(function(a){return a.source!==n;});allocs.push({source:n,monthly:amt});renderPlan();updateAddLabel();});
+        var ds=p.getAttribute('data-src')||sel.value;sel.value=ds;renderPreview(ds,+(p.getAttribute('data-amt')||0));renderPlan();updateAddLabel();
       });
       `,
       '})();',
