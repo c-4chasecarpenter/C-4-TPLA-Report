@@ -647,6 +647,27 @@ export default function Report({ data: d, onEdit }: { data: ReportData; onEdit: 
       // Buttons/controls that only work interactively — hide in the static snapshot.
       clone.querySelectorAll<HTMLElement>('.c4-add-btn, .c4-plan-actions').forEach((e) => { e.style.display = 'none'; });
 
+      // Remove a content element along with its preceding section header.
+      const removeWithLabel = (el: Element | null | undefined) => {
+        if (!el) return;
+        const prev = el.previousElementSibling;
+        if (prev && prev.classList.contains('sec-label')) prev.remove();
+        el.remove();
+      };
+
+      // Condensed PDF: strip charts, projection sliders, the All Data Sources
+      // table, the repeated benchmark key, and the reallocation projector.
+      clone.querySelectorAll('.chart-wrap, .chart-legend').forEach((e) => e.remove()); // bar charts in month cards
+      clone.querySelectorAll('.pbars-grid').forEach((e) => removeWithLabel(e.closest('.card'))); // "Performance at a glance"
+      clone.querySelectorAll('.proj').forEach((p) => {                                  // "Cost per sale by closing rate"
+        const wrap = p.parentElement;
+        if (wrap && wrap.classList.contains('sold-only') && wrap.children.length <= 2) wrap.remove();
+        else removeWithLabel(p);
+      });
+      clone.querySelectorAll('.unmatched-block').forEach((e) => e.remove());             // All Data Sources
+      clone.querySelectorAll('.bench-key').forEach((e) => e.remove());                   // repeated benchmarks
+      clone.querySelectorAll('.c4-realloc').forEach((e) => removeWithLabel(e));          // Reallocation projector
+
       // Expand every panel and flatten the two-column layout (rail stacks below).
       const panels = Array.from(clone.querySelectorAll<HTMLElement>('.panel'));
       panels.forEach((p) => { p.classList.add('active'); p.style.display = 'block'; });
