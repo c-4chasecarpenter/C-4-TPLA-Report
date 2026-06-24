@@ -4,7 +4,9 @@
 **Started:** 2026-06-24
 **Goal:** Make data ingestion read *any* third-party-lead CRM export (CSV/Excel) — auto-detect structure, map columns into the canonical model, and stress-test against a corpus of real files. Production app stays untouched until the preview is verified.
 
-How to test: push branch → Vercel builds a preview URL → drag real files in. Run tests with `npm test`.
+How to test: run tests with `npm test`. (Preview URLs: see Vercel note below.)
+
+> ⚠️ **Vercel wiring (found 2026-06-24):** local git `origin` = `c-4chasecarpenter/C-4-TPLA-Report`, but the Vercel "tpla" project's only deployment came from repo `tpla-report` on branch `master`. So pushing this branch does **not** auto-build a preview. Production is therefore safe from our pushes — but before Phase 1 (first visual change) we must reconnect the Vercel project's Git integration to `C-4-TPLA-Report` (or deploy previews explicitly via `vercel` CLI). Build sanity is being verified locally with `npx next build` in the meantime.
 
 ---
 
@@ -12,7 +14,7 @@ How to test: push branch → Vercel builds a preview URL → drag real files in.
 
 | Phase | What | State |
 |---|---|---|
-| 0 | Vitest harness + fixture corpus + golden-number baseline | 🔄 in progress |
+| 0 | Vitest harness + fixture corpus + golden-number baseline | ✅ done (commit 5d0b8d8) |
 | 1 | Cleaning + mapping core (real-header detect, multi-sheet xlsx, hardened number parsing, headerless desk-log) | ⬜ not started |
 | 2 | Role-scoring detector + preview/override UI (replaces hardcoded signatures) | ⬜ not started |
 | 3 | Matching polish (source aliases, reclassify-unknown-status, per-file error isolation) | ⬜ not started |
