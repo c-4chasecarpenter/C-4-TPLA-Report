@@ -164,7 +164,15 @@ export function parseRowsWithMapping(
 ): AggregatedRow[] {
   const month = inferMonth(fileName);
   const rows: AggregatedRow[] = [];
-  let prevLeads = NaN;
+  // DealerSocket "Group" reports break a parent source into generic lead-type
+  // child rows (Internet/Phone/…) whose leads/sold/gross are a SUBSET of the
+  // parent's. Skip such a row while the running child totals stay within the
+  // parent — this catches multi-child breakdowns (Internet 91 + Phone 1 = 92)
+  // without swallowing a standalone source that merely happens to be named
+  // "Internet" but carries sold/gross the parent above does not.
+  let parentLeads = NaN, parentSold = 0, parentGross = 0;
+  let childLeads = 0, childSold = 0, childGross = 0;
+  const EPS = 0.5;
 
   for (let r = headerIdx + 1; r < grid.length; r++) {
     const cells = grid[r] ?? [];
@@ -174,9 +182,6 @@ export function parseRowsWithMapping(
     if (SKIP_SRC(sn)) continue;
 
     const leads = m.leadsIdx >= 0 ? parseCount(cells[m.leadsIdx]) : 0;
-    // Skip duplicate child sub-rows (generic lead-type that repeats the parent's count).
-    if (GENERIC_TYPE.has(sn) && leads === prevLeads) continue;
-
     const bad = m.badIdx >= 0 ? parseCount(cells[m.badIdx]) : 0;
     const dup = m.dupIdx >= 0 ? parseCount(cells[m.dupIdx]) : 0;
     const good = m.goodIdx >= 0 ? parseCount(cells[m.goodIdx]) : Math.max(0, leads - bad - dup);
@@ -184,9 +189,20 @@ export function parseRowsWithMapping(
     let gross = m.grossIdx.reduce((s, i) => s + (i >= 0 ? parseMoney(cells[i]) : 0), 0);
     if (m.pvr) gross = gross * sold; // PVR is per-deal → total = avg × units
 
+    if (
+      GENERIC_TYPE.has(sn) && !isNaN(parentLeads) &&
+      childLeads + leads <= parentLeads &&
+      childSold + sold <= parentSold &&
+      childGross + gross <= parentGross + EPS
+    ) {
+      childLeads += leads; childSold += sold; childGross += gross;
+      continue; // a lead-type breakdown of the parent above
+    }
+
     if (good + sold + bad + dup + leads === 0 && gross === 0) continue;
     rows.push({ source: srcRaw, good, sold, bad, dup, gross, month });
-    prevLeads = leads;
+    parentLeads = leads; parentSold = sold; parentGross = gross;
+    childLeads = 0; childSold = 0; childGross = 0;
   }
 
   return rows;

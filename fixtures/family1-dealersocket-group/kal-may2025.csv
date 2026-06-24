@@ -1,0 +1,51 @@
+ ,Leads, , ,Appointment, , ,Sold, , , ,Gross, ,
+Group,Leads,Contact,Percent,Booked,Show,Sold,Units,Close Ratio,Trades,Days to Sell,Vehicle,Back End,Total
+BeBack,65,18,0.2769230769,0,0,0,41,0.6307692308,6,4.390243902,22660.83,9426.76,32087.59
+Brand Site - Find A Dealer,1,0,0,0,0,0,0,0,0,0,0,0,0
+Campaign,2,0,0,0,0,0,1,0.5,0,1,0,0,0
+Car Gurus,15,8,0.5333333333,0,0,0,0,0,0,0,0,0,0
+CarFAX FBA Lead,1,0,0,0,0,0,0,0,0,0,0,0,0
+Chat-Dealer Website,29,15,0.5172413793,0,0,0,1,0.03448275862,0,6,-3039.85,328.72,-2711.13
+Chat-Dealer Website - ADV social,3,1,0.3333333333,0,0,0,0,0,0,0,0,0,0
+DC Battery - ADV search,1,0,0,0,0,0,0,0,0,0,0,0,0
+DC CPO Ford - ADV social,1,0,0,0,0,0,0,0,0,0,0,0,0
+DC Used Quote Ford - ADV social,2,2,1,0,0,0,0,0,0,0,0,0,0
+First Watch - Back In Market,1,1,1,0,0,0,0,0,0,0,0,0,0
+Internet,1,1,1,0,0,0,1,1,0,1,2018.74,517.7,2536.44
+Internet Lead,92,37,0.402173913,0,0,0,2,0.02173913043,0,9,3717.6,2204.6,5922.2
+Internet,91,36,0.3956043956,0,0,0,2,0.02197802198,0,9,3717.6,2204.6,5922.2
+Phone,1,1,1,0,0,0,0,0,0,0,0,0,0
+Kelley Blue Book,277,8,0.02888086643,0,0,0,0,0,0,0,0,0,0
+Phone Up,13,4,0.3076923077,0,0,0,5,0.3846153846,0,1.2,7902.43,2840.17,10742.6
+Referral,13,1,0.07692307692,0,0,0,10,0.7692307692,4,17.7,15888.76,14315.75,30204.51
+Repeat,17,7,0.4117647059,0,0,0,9,0.5294117647,8,5.666666667,11340.81,1761.58,13102.39
+Stellantis Digital Third Party - Qualified Hot Lead,1,1,1,0,0,0,0,0,0,0,0,0,0
+Internet,1,1,1,0,0,0,0,0,0,0,0,0,0
+Stellantis Digital Third Party - Qualified Warm Lead,1,0,0,0,0,0,0,0,0,0,0,0,0
+Stellantis Digital Third Party - Re-Engaged Hot,1,1,1,0,0,0,0,0,0,0,0,0,0
+Stellantis Digital Third Party - Re-Engaged Warm,2,0,0,0,0,0,0,0,0,0,0,0,0
+TV New Trade-In Lead,7,2,0.2857142857,0,0,0,0,0,0,0,0,0,0
+TV Service Coupon,13,8,0.6153846154,0,0,0,0,0,0,0,0,0,0
+Walk In,35,8,0.2285714286,0,0,0,17,0.4857142857,2,3.352941176,38850.58,8267.03,47117.61
+z AutoTrader.com,47,31,0.6595744681,0,0,0,1,0.02127659574,0,10,1465.6,1600,3065.6
+z Cars.com,47,43,0.914893617,0,0,0,0,0,0,0,0,0,0
+z Chat-Dealer Website - ADV search,8,5,0.625,0,0,0,0,0,0,0,0,0,0
+z FordDirect - Used Lead,2,1,0.5,0,0,0,0,0,0,0,0,0,0
+zz CARFAX,10,9,0.9,0,0,0,1,0.1,0,28,1963.7,0,1963.7
+zz CarNow,41,21,0.512195122,0,0,0,0,0,0,0,0,0,0
+zz Chat-Dealer Website,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz DC Contact Us,4,4,1,0,0,0,0,0,0,0,0,0,0
+zz DC CPO Ford,3,0,0,0,0,0,1,0.3333333333,1,6,4540.72,1061.49,5602.21
+zz DC New Quote Ford,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz DC Parts,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz DC Used Quote Ford,13,11,0.8461538462,0,0,0,0,0,0,0,0,0,0
+zz Dealer.com,3,3,1,0,0,0,0,0,0,0,0,0,0
+zz Dealer.com - Get Your ePrice,5,5,1,0,0,0,0,0,0,0,0,0,0
+zz FD - OEM Incentives,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz FD - OEM Quick Quote,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz FD - OEM Search Inventory,1,1,1,0,0,0,0,0,0,0,0,0,0
+zz FD - Trade-In,2,2,1,0,0,0,0,0,0,0,0,0,0
+zz FMCC Prequal,1,0,0,0,0,0,0,0,0,0,0,0,0
+zz iShowroom,1,0,0,0,0,0,0,0,0,0,0,0,0
+zz Stellantis - Hot List,1,1,1,0,0,0,0,0,0,0,0,0,0
+Total,788,265,0.3362944162,0,0,0,90,0.114213198,21,6.011111111,107309.92,42323.8,149633.72

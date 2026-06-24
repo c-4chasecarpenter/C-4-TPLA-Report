@@ -75,6 +75,26 @@ describe('Family 1 — DealerSocket Group (KAL Apr 2026)', () => {
     expect(sum(res.rows, 'sold')).toBe(74);
     expect(sum(res.rows, 'gross')).toBeCloseTo(154831.57, 2);
   });
+
+  // Regression: a parent that splits into multiple lead-type children
+  // (Internet 91 + Phone 1 = Internet Lead 92) must not double-count.
+  it('multi-child breakdown does not double-count (KAL May 2025 = 788 / 90)', async () => {
+    const res = await parseFile(loadFixture('family1-dealersocket-group/kal-may2025.csv'));
+    if (res.kind !== 'aggregated') throw new Error('not aggregated');
+    expect(sum(res.rows, 'good')).toBe(788);
+    expect(sum(res.rows, 'sold')).toBe(90);
+    expect(sum(res.rows, 'gross')).toBeCloseTo(149633.72, 2);
+  });
+
+  // Guard: a standalone source legitimately named "Internet" (18 leads, real
+  // sold/gross) must NOT be absorbed as a child.
+  it('standalone generic-named source is kept (GA Apr 2026 = 462 / 86)', async () => {
+    const res = await parseFile(loadFixture('family1-dealersocket-group/ga-apr2026.csv'));
+    if (res.kind !== 'aggregated') throw new Error('not aggregated');
+    expect(sum(res.rows, 'good')).toBe(462);
+    expect(sum(res.rows, 'sold')).toBe(86);
+    expect(sum(res.rows, 'gross')).toBeCloseTo(188100.54, 2);
+  });
 });
 
 // ---------------------------------------------------------------------------
