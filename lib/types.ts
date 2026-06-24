@@ -12,9 +12,31 @@ export interface AggregatedRow {
   month?: string; // 'YYYY-MM' when inferrable from filename
 }
 
+// Which column index feeds each canonical field in an aggregated report.
+// -1 = not present. Surfaced to the UI so the user can see/override the mapping.
+export interface AggColMap {
+  sourceIdx: number;
+  leadsIdx: number;
+  goodIdx: number;
+  badIdx: number;
+  dupIdx: number;
+  soldIdx: number;
+  grossIdx: number[];
+  pvr: boolean;
+}
+
+// Everything needed to re-parse an aggregated file when the user overrides the
+// detected mapping (the raw grid is retained so re-parsing is local + instant).
+export interface AggRemap {
+  grid: string[][];
+  headerIdx: number;
+  labels: string[]; // display label per column ("Band · Header")
+  map: AggColMap;
+}
+
 export type ParseResult =
   | { kind: 'desklog'; rows: Row[]; fileName: string }
-  | { kind: 'aggregated'; rows: AggregatedRow[]; fileName: string };
+  | { kind: 'aggregated'; rows: AggregatedRow[]; fileName: string; remap?: AggRemap };
 
 export interface Threshold { good: number; bad: number; }
 export interface Thresholds { cpl: Threshold; close: Threshold; cpa: Threshold; }

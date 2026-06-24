@@ -91,3 +91,28 @@ describe('Family 3 — Cox/VinSolutions flat (Courtesy Feb 2026)', () => {
     expect(sum(res.rows, 'gross')).toBeCloseTo(38137.15, 2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Detection mapping exposed to the UI — the labels the override panel shows.
+// ---------------------------------------------------------------------------
+describe('exposed column mapping (drives the preview/override UI)', () => {
+  const labelAt = (r: Extract<Awaited<ReturnType<typeof parseFile>>, { kind: 'aggregated' }>, idx: number) =>
+    r.remap!.labels[idx] ?? '';
+
+  it('KAL Group: source=Group, sold=Units, gross=Total', async () => {
+    const res = await parseFile(loadFixture('family1-dealersocket-group/kal-apr2026.csv'));
+    if (res.kind !== 'aggregated' || !res.remap) throw new Error('expected aggregated w/ remap');
+    expect(labelAt(res, res.remap.map.sourceIdx)).toContain('Group');
+    expect(labelAt(res, res.remap.map.soldIdx)).toContain('Units');
+    expect(labelAt(res, res.remap.map.grossIdx[0])).toContain('Total');
+  });
+
+  it('Courtesy flat: source=Lead Source, good=Good Leads, sold=Sold from Leads, gross=Total Gross', async () => {
+    const res = await parseFile(loadFixture('family3-cox-flat/courtesy-feb2026.csv'));
+    if (res.kind !== 'aggregated' || !res.remap) throw new Error('expected aggregated w/ remap');
+    expect(labelAt(res, res.remap.map.sourceIdx)).toBe('Lead Source');
+    expect(labelAt(res, res.remap.map.goodIdx)).toBe('Good Leads');
+    expect(labelAt(res, res.remap.map.soldIdx)).toBe('Sold from Leads');
+    expect(labelAt(res, res.remap.map.grossIdx[0])).toBe('Total Gross');
+  });
+});

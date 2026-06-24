@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { Row, AggregatedRow, ParseResult } from './types';
 import { resolveGrossIdx, parseMoney } from './gross';
-import { parseAggregatedGrid, detectHeaderless, headerlessToRows, inferMonth } from './detect';
+import { detectAggregated, parseRowsWithMapping, detectHeaderless, headerlessToRows, inferMonth } from './detect';
 
 const normH = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -201,9 +201,20 @@ export async function parseFile(file: File): Promise<ParseResult> {
 
     // Generalized aggregated detection (DealerSocket Group/Opportunities,
     // Cox/VinSolutions flat, etc.) — role-scores columns instead of matching
-    // hardcoded vendor signatures.
-    const aggRows = parseAggregatedGrid(raw, file.name);
-    if (aggRows) return { kind: 'aggregated', rows: aggRows, fileName: file.name };
+    // hardcoded vendor signatures. Retains the grid + mapping so the UI can
+    // surface and override the detector's choices.
+    const det = detectAggregated(raw);
+    if (det) {
+      const rows = parseRowsWithMapping(raw, det.headerIdx, det.map, file.name);
+      if (rows.length) {
+        return {
+          kind: 'aggregated',
+          rows,
+          fileName: file.name,
+          remap: { grid: raw, headerIdx: det.headerIdx, labels: det.labels, map: det.map },
+        };
+      }
+    }
 
     // Headerless desk-log (export dropped its header row).
     const headerless = detectHeaderless(raw);

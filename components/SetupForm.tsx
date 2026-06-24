@@ -1,8 +1,9 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { parseFile } from '@/lib/parse';
+import { parseRowsWithMapping } from '@/lib/detect';
 import { analyze, detectColumns, autoDetectMonths, DEFAULT_THRESHOLDS } from '@/lib/analysis';
-import { ReportData, SourceEntry, Thresholds, ColumnMap, ParseResult } from '@/lib/types';
+import { ReportData, SourceEntry, Thresholds, ColumnMap, ParseResult, AggColMap } from '@/lib/types';
 import { fmt$ } from '@/lib/format';
 
 const SEED = ['CarGurus', 'Autotrader', 'Cars.com', 'Carfax'];
@@ -114,6 +115,16 @@ export default function SetupForm({ onGenerate, initialData }: { onGenerate: (r:
 
       return next;
     });
+  }
+
+  // User overrides a detected column on an aggregated file → re-parse locally.
+  function setAggMap(fileIdx: number, patch: Partial<AggColMap>) {
+    setFiles((prev) => prev.map((f, i) => {
+      if (i !== fileIdx || f.kind !== 'aggregated' || !f.remap) return f;
+      const map = { ...f.remap.map, ...patch };
+      const rows = parseRowsWithMapping(f.remap.grid, f.remap.headerIdx, map, f.fileName);
+      return { ...f, rows, remap: { ...f.remap, map } };
+    }));
   }
 
   function run() {
@@ -229,6 +240,13 @@ export default function SetupForm({ onGenerate, initialData }: { onGenerate: (r:
             </div>
           )}
 
+          {/* Per-file detection preview + override for aggregated (summary) files */}
+          {files.map((f, i) =>
+            f.kind === 'aggregated' && f.remap ? (
+              <AggregatedMapper key={f.fileName} file={f} onChange={(patch) => setAggMap(i, patch)} />
+            ) : null,
+          )}
+
           <div className="footer-bar">
             <div className="auto-note">
               {detected ? <>Detected <b>{detected} month{detected > 1 ? 's' : ''}</b> of data. Adjust if needed: </> : 'Months in this data: '}
@@ -305,6 +323,92 @@ function ColMapRow({ label, hint, required, value, options, onChange }: {
       <select value={value} onChange={(e) => onChange(e.target.value)} className={!value && required ? 'col-map-select required' : 'col-map-select'}>
         <option value="">{required ? '— select a column —' : '— not in this file —'}</option>
         {options.filter(Boolean).map((h) => <option key={h} value={h}>{h}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ---- Aggregated (summary file) detection preview + override ----
+function AggregatedMapper({ file, onChange }: {
+  file: Extract<ParseResult, { kind: 'aggregated' }>;
+  onChange: (patch: Partial<AggColMap>) => void;
+}) {
+  if (!file.remap) return null;
+  const { labels, map } = file.remap;
+  const opts = labels.map((l, i) => ({ value: i, label: l || `Column ${i + 1}` }));
+
+  const totals = file.rows.reduce(
+    (t, r) => ({ good: t.good + r.good, sold: t.sold + r.sold, gross: t.gross + r.gross }),
+    { good: 0, sold: 0, gross: 0 },
+  );
+  const sample = file.rows.slice(0, 5);
+  const hasGross = file.rows.some((r) => r.gross !== 0);
+
+  return (
+    <div className="col-mapper" style={{ marginTop: 12 }}>
+      <div className="col-mapper-head">
+        <span className="eyebrow" style={{ color: '#2563EB' }}>Summary file detected — {file.fileName}</span>
+        <p className="auto-note" style={{ marginTop: 4 }}>
+          We mapped your columns automatically. Check them against the preview below and adjust any that look wrong — the totals should match your report.
+        </p>
+      </div>
+      <div className="col-mapper-grid">
+        <AggRoleRow label="Lead source" hint="the platform / source name" value={map.sourceIdx} options={opts} onPick={(v) => onChange({ sourceIdx: v })} />
+        <AggRoleRow label="Total leads" hint="lead count per source" value={map.leadsIdx} options={opts} optional onPick={(v) => onChange({ leadsIdx: v })} />
+        <AggRoleRow label="Good leads" hint="non-bad, non-duplicate leads (derived if not set)" value={map.goodIdx} options={opts} optional onPick={(v) => onChange({ goodIdx: v })} />
+        <AggRoleRow label="Sold" hint="units sold from these leads" value={map.soldIdx} options={opts} optional onPick={(v) => onChange({ soldIdx: v })} />
+        <AggRoleRow label="Gross" hint="total gross profit" value={map.grossIdx[0] ?? -1} options={opts} optional onPick={(v) => onChange({ grossIdx: v < 0 ? [] : [v] })} />
+      </div>
+
+      <table className="agg-preview" style={{ width: '100%', marginTop: 12, borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ textAlign: 'left', color: '#6B7280' }}>
+            <th style={{ padding: '4px 8px' }}>Source</th>
+            <th style={{ padding: '4px 8px', textAlign: 'right' }}>Good</th>
+            <th style={{ padding: '4px 8px', textAlign: 'right' }}>Sold</th>
+            {hasGross && <th style={{ padding: '4px 8px', textAlign: 'right' }}>Gross</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {sample.map((r, i) => (
+            <tr key={i} style={{ borderTop: '1px solid #EEF2F7' }}>
+              <td style={{ padding: '4px 8px' }}>{r.source}</td>
+              <td style={{ padding: '4px 8px', textAlign: 'right' }}>{r.good.toLocaleString()}</td>
+              <td style={{ padding: '4px 8px', textAlign: 'right' }}>{r.sold.toLocaleString()}</td>
+              {hasGross && <td style={{ padding: '4px 8px', textAlign: 'right' }}>{fmt$(r.gross)}</td>}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ borderTop: '2px solid #E5E7EB', fontWeight: 600 }}>
+            <td style={{ padding: '6px 8px' }}>Total · {file.rows.length} sources</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{totals.good.toLocaleString()}</td>
+            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{totals.sold.toLocaleString()}</td>
+            {hasGross && <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt$(totals.gross)}</td>}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function AggRoleRow({ label, hint, value, options, optional, onPick }: {
+  label: string;
+  hint: string;
+  value: number;
+  options: { value: number; label: string }[];
+  optional?: boolean;
+  onPick: (v: number) => void;
+}) {
+  return (
+    <div className="col-map-row">
+      <div>
+        <span className="col-map-label">{label}</span>
+        <span className="hint"> — {hint}</span>
+      </div>
+      <select className="col-map-select" value={value} onChange={(e) => onPick(parseInt(e.target.value, 10))}>
+        {optional && <option value={-1}>— not in this file —</option>}
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );

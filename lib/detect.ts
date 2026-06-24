@@ -3,7 +3,7 @@
 // desk-log). Role-scores columns by name + 2-row super-header band instead of
 // matching hardcoded vendor signatures. See docs/ingestion-v2.md.
 
-import { AggregatedRow, Row } from './types';
+import { AggregatedRow, Row, AggColMap } from './types';
 import { parseMoney, parseCount } from './gross';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -70,18 +70,7 @@ export function findAggHeader(grid: string[][]): AggHeader | null {
   return null;
 }
 
-interface AggMapping {
-  sourceIdx: number;
-  totalLeadsIdx: number;
-  goodIdx: number;
-  badIdx: number;
-  dupIdx: number;
-  soldIdx: number;
-  grossIdx: number[]; // sum these (usually a single grand-total column)
-  pvr: boolean;       // gross columns are per-deal averages → multiply by sold
-}
-
-function buildMapping(h: AggHeader): AggMapping | null {
+function buildMapping(h: AggHeader): AggColMap | null {
   const header = h.header;
   const rawLower = header.map((x) => String(x ?? '').toLowerCase());
   const ctx = header.map((x, i) => norm((h.band[i] ?? '') + ' ' + x));
@@ -96,7 +85,7 @@ function buildMapping(h: AggHeader): AggMapping | null {
   const goodIdx = find((c) => c.includes('goodlead'));
   const badIdx = find((c) => c.includes('badlead') && !c.includes('other'));
   const dupIdx = find((c) => c.includes('duplicate'));
-  const totalLeadsIdx = find((c, i) =>
+  const leadsIdx = find((c, i) =>
     !isPct(i) && (
       c.includes('totallead') ||
       c.includes('totalopportunit') || c.includes('netopportunit') ||
@@ -138,29 +127,53 @@ function buildMapping(h: AggHeader): AggMapping | null {
   }
 
   // Need a usable mapping: a source plus at least one of leads/good/sold.
-  if (sourceIdx < 0 || (totalLeadsIdx < 0 && goodIdx < 0 && soldIdx < 0)) return null;
-  return { sourceIdx, totalLeadsIdx, goodIdx, badIdx, dupIdx, soldIdx, grossIdx, pvr };
+  if (sourceIdx < 0 || (leadsIdx < 0 && goodIdx < 0 && soldIdx < 0)) return null;
+  return { sourceIdx, leadsIdx, goodIdx, badIdx, dupIdx, soldIdx, grossIdx, pvr };
 }
 
-// Try to detect + parse a grid as an aggregated report. Returns rows or null.
-export function parseAggregatedGrid(grid: string[][], fileName: string): AggregatedRow[] | null {
+// Detection result the UI consumes: where the header is, its labels, and the
+// chosen column mapping (which the user may override before re-parsing).
+export interface AggDetection {
+  headerIdx: number;
+  header: string[];   // raw labels at the header row
+  band: string[];     // forward-filled super-header band (or [])
+  labels: string[];   // display labels = "Band · Header"
+  map: AggColMap;
+}
+
+export function detectAggregated(grid: string[][]): AggDetection | null {
   const found = findAggHeader(grid);
   if (!found) return null;
-  const m = buildMapping(found);
-  if (!m) return null;
+  const map = buildMapping(found);
+  if (!map) return null;
+  const labels = found.header.map((hh, i) => {
+    const b = (found.band[i] ?? '').trim();
+    const t = String(hh ?? '').trim();
+    return b && b.toLowerCase() !== t.toLowerCase() ? `${b} · ${t}` : t;
+  });
+  return { headerIdx: found.idx, header: found.header, band: found.band, labels, map };
+}
 
+// Parse a grid into canonical rows using an explicit mapping (the detector's or
+// a user-overridden one). Pure — same input always yields the same rows.
+export function parseRowsWithMapping(
+  grid: string[][],
+  headerIdx: number,
+  m: AggColMap,
+  fileName: string,
+): AggregatedRow[] {
   const month = inferMonth(fileName);
   const rows: AggregatedRow[] = [];
   let prevLeads = NaN;
 
-  for (let r = found.idx + 1; r < grid.length; r++) {
+  for (let r = headerIdx + 1; r < grid.length; r++) {
     const cells = grid[r] ?? [];
     const srcRaw = String(cells[m.sourceIdx] ?? '').trim();
     if (!srcRaw) continue;
     const sn = srcRaw.toLowerCase().replace(/[^a-z]/g, '');
     if (SKIP_SRC(sn)) continue;
 
-    const leads = m.totalLeadsIdx >= 0 ? parseCount(cells[m.totalLeadsIdx]) : 0;
+    const leads = m.leadsIdx >= 0 ? parseCount(cells[m.leadsIdx]) : 0;
     // Skip duplicate child sub-rows (generic lead-type that repeats the parent's count).
     if (GENERIC_TYPE.has(sn) && leads === prevLeads) continue;
 
@@ -168,7 +181,7 @@ export function parseAggregatedGrid(grid: string[][], fileName: string): Aggrega
     const dup = m.dupIdx >= 0 ? parseCount(cells[m.dupIdx]) : 0;
     const good = m.goodIdx >= 0 ? parseCount(cells[m.goodIdx]) : Math.max(0, leads - bad - dup);
     const sold = m.soldIdx >= 0 ? parseCount(cells[m.soldIdx]) : 0;
-    let gross = m.grossIdx.reduce((s, i) => s + parseMoney(cells[i]), 0);
+    let gross = m.grossIdx.reduce((s, i) => s + (i >= 0 ? parseMoney(cells[i]) : 0), 0);
     if (m.pvr) gross = gross * sold; // PVR is per-deal → total = avg × units
 
     if (good + sold + bad + dup + leads === 0 && gross === 0) continue;
@@ -176,6 +189,14 @@ export function parseAggregatedGrid(grid: string[][], fileName: string): Aggrega
     prevLeads = leads;
   }
 
+  return rows;
+}
+
+// Try to detect + parse a grid as an aggregated report. Returns rows or null.
+export function parseAggregatedGrid(grid: string[][], fileName: string): AggregatedRow[] | null {
+  const d = detectAggregated(grid);
+  if (!d) return null;
+  const rows = parseRowsWithMapping(grid, d.headerIdx, d.map, fileName);
   return rows.length ? rows : null;
 }
 
