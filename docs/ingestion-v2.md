@@ -6,6 +6,8 @@
 
 How to test: run tests with `npm test`. (Preview URLs: see Vercel note below.)
 
+**Latest preview deploy (commit 4920589):** https://tpla-ls03rj8wi-chasecarpenter24-8648s-projects.vercel.app — explicit `vercel deploy` (target=preview, prod untouched). NOTE: not auto-updated on push; re-run `npx vercel deploy --yes` after new commits to refresh it.
+
 > ⚠️ **Vercel wiring (found 2026-06-24):** local git `origin` = `c-4chasecarpenter/C-4-TPLA-Report`, but the Vercel "tpla" project's only deployment came from repo `tpla-report` on branch `master`. So pushing this branch does **not** auto-build a preview. Production is therefore safe from our pushes — but before Phase 1 (first visual change) we must reconnect the Vercel project's Git integration to `C-4-TPLA-Report` (or deploy previews explicitly via `vercel` CLI). Build sanity is being verified locally with `npx next build` in the meantime.
 
 ---
@@ -16,8 +18,10 @@ How to test: run tests with `npm test`. (Preview URLs: see Vercel note below.)
 |---|---|---|
 | 0 | Vitest harness + fixture corpus + golden-number baseline | ✅ done (commit 5d0b8d8) |
 | 1 | Cleaning + mapping core — CSV path | 🔄 mostly done (see below) |
-| 2 | Preview/override UI (surface detection + let user correct) | ⬜ not started |
+| 2 | Preview/override UI (surface detection + let user correct) | 🔄 aggregated done; desk-log sample pending |
 | 3 | Matching polish (source aliases, reclassify-unknown-status, per-file error isolation) | ⬜ not started |
+
+**Phase 2 done so far (commit 4920589):** `detectAggregated()` + pure `parseRowsWithMapping()` exposed; `ParseResult.aggregated` carries `remap {grid, headerIdx, labels, map}`; `SetupForm` renders `AggregatedMapper` per summary file — source/leads/good/sold/gross dropdowns + live 5-row sample + totals; override re-parses instantly. Tests assert exposed labels. **Remaining:** desk-log gets a sample-preview too (today only shows a mapper when auto-detect fails); polish styling into globals.css.
 
 **Phase 1 done so far (`lib/detect.ts`, CSV path):**
 - Hardened `parseMoney` + new `parseCount` (commas, sci-notation, `$-x`, `########`→0, `%`, `()`/`-`). Unit-tested in `lib/gross.test.ts`.
