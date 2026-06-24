@@ -6,7 +6,9 @@
 
 How to test: run tests with `npm test`. (Preview URLs: see Vercel note below.)
 
-**Latest preview deploy (commit 4920589):** https://tpla-ls03rj8wi-chasecarpenter24-8648s-projects.vercel.app — explicit `vercel deploy` (target=preview, prod untouched). NOTE: not auto-updated on push; re-run `npx vercel deploy --yes` after new commits to refresh it.
+**Latest preview deploy:** https://tpla-73t34af5j-chasecarpenter24-8648s-projects.vercel.app — explicit `vercel deploy` (target=preview, prod untouched). NOTE: not auto-updated on push; re-run `npx vercel deploy --yes` after new commits to refresh it.
+
+> **OPEN ISSUE (raised 2026-06-24):** A user uploaded 8 GA·KAL tabs as separate CSVs = 2 rooftops (GA + KAL) × 2 years (2025/2026). The tool currently SUMS every loaded file into ONE report → blends dealerships and years. Need per-file dealer + period tagging (or load one dealer/period at a time). Same root need as the multi-sheet xlsx sheet-mapping decision.
 
 > ⚠️ **Vercel wiring (found 2026-06-24):** local git `origin` = `c-4chasecarpenter/C-4-TPLA-Report`, but the Vercel "tpla" project's only deployment came from repo `tpla-report` on branch `master`. So pushing this branch does **not** auto-build a preview. Production is therefore safe from our pushes — but before Phase 1 (first visual change) we must reconnect the Vercel project's Git integration to `C-4-TPLA-Report` (or deploy previews explicitly via `vercel` CLI). Build sanity is being verified locally with `npx next build` in the meantime.
 
