@@ -48,7 +48,7 @@ describe('Family 4 — raw desk-log (Griffin Jul Used)', () => {
 // TARGET: should still be recognized as a desk-log. Broken today → it.fails.
 // ---------------------------------------------------------------------------
 describe('Family 4 edge — headerless desk-log (Griffin Jul New)', () => {
-  it.fails('TARGET: recognizes a headerless desk-log and finds 4 Sold', async () => {
+  it('recognizes a headerless desk-log and finds 4 Sold', async () => {
     const res = await parseFile(loadFixture('family4-desklog/griffin-jul-new-NOHEADER.csv'));
     expect(res.kind).toBe('desklog');
     if (res.kind !== 'desklog') throw new Error('not desklog');
@@ -67,7 +67,7 @@ describe('Family 4 edge — headerless desk-log (Griffin Jul New)', () => {
 // Enforces child-subrow skipping (the duplicate "Internet" rows must NOT add).
 // ---------------------------------------------------------------------------
 describe('Family 1 — DealerSocket Group (KAL Apr 2026)', () => {
-  it.fails('TARGET: aggregated totals match the Total row (leads 760 / sold 74 / gross 154831.57)', async () => {
+  it('aggregated totals match the Total row (leads 760 / sold 74 / gross 154831.57)', async () => {
     const res = await parseFile(loadFixture('family1-dealersocket-group/kal-apr2026.csv'));
     expect(res.kind).toBe('aggregated');
     if (res.kind !== 'aggregated') throw new Error('not aggregated');
@@ -82,7 +82,7 @@ describe('Family 1 — DealerSocket Group (KAL Apr 2026)', () => {
 // Golden truth = the TOTAL row: Good Leads 251, Sold from Leads 20, Total Gross 38,137.15.
 // ---------------------------------------------------------------------------
 describe('Family 3 — Cox/VinSolutions flat (Courtesy Feb 2026)', () => {
-  it.fails('TARGET: aggregated totals match the TOTAL row (good 251 / sold 20 / gross 38137.15)', async () => {
+  it('aggregated totals match the TOTAL row (good 251 / sold 20 / gross 38137.15)', async () => {
     const res = await parseFile(loadFixture('family3-cox-flat/courtesy-feb2026.csv'));
     expect(res.kind).toBe('aggregated');
     if (res.kind !== 'aggregated') throw new Error('not aggregated');

@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { Row, AggregatedRow, ParseResult } from './types';
 import { resolveGrossIdx, parseMoney } from './gross';
+import { parseAggregatedGrid, detectHeaderless, headerlessToRows, inferMonth } from './detect';
 
 const normH = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -26,20 +27,6 @@ function findAggHeaderRow(data: string[][]): number {
     if (row.some((c) => c === 'goodleads') && row.some((c) => c === 'sold')) return i;
   }
   return -1;
-}
-
-const MONTH_NAMES = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
-
-function inferMonth(fileName: string): string | undefined {
-  const n = fileName.toLowerCase();
-  const ym = n.match(/(\d{4})[\-_](\d{1,2})/);
-  if (ym) return `${ym[1]}-${ym[2].padStart(2, '0')}`;
-  for (let i = 0; i < MONTH_NAMES.length; i++) {
-    if (n.startsWith(MONTH_NAMES[i]) || n.includes(`-${MONTH_NAMES[i]}-`) || n.includes(`_${MONTH_NAMES[i]}_`)) {
-      return `${new Date().getFullYear()}-${String(i + 1).padStart(2, '0')}`;
-    }
-  }
-  return undefined;
 }
 
 // ---- DealerSocket wide format (Tracking Codes / Marketing Channels) ----
@@ -210,6 +197,19 @@ export async function parseFile(file: File): Promise<ParseResult> {
       const rows = parseAggregated(raw, aggIdx, file.name);
       if (!rows.length) throw new Error('Detected aggregated format but found no data rows.');
       return { kind: 'aggregated', rows, fileName: file.name };
+    }
+
+    // Generalized aggregated detection (DealerSocket Group/Opportunities,
+    // Cox/VinSolutions flat, etc.) — role-scores columns instead of matching
+    // hardcoded vendor signatures.
+    const aggRows = parseAggregatedGrid(raw, file.name);
+    if (aggRows) return { kind: 'aggregated', rows: aggRows, fileName: file.name };
+
+    // Headerless desk-log (export dropped its header row).
+    const headerless = detectHeaderless(raw);
+    if (headerless) {
+      const rows = headerlessToRows(raw, headerless);
+      if (rows.length) return { kind: 'desklog', rows, fileName: file.name };
     }
 
     const rows = rawToRows(raw);

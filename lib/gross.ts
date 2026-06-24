@@ -8,18 +8,34 @@
 
 const norm = (h: string) => String(h).toLowerCase().replace(/[^a-z0-9]/g, '');
 
-// Parse a money-ish cell: "$1,234.50", "(500)" → -500, "" → 0.
+// Parse a money-ish cell from any CRM export. Handles the real-world mess:
+//   "$1,234.50" → 1234.5      "(500)" / "-$500" / "$-500" → -500
+//   "1,491" (comma-thousands) → 1491    "6.22E+03" (Excel sci-notation) → 6220
+//   "########" (Excel column-overflow, value unrecoverable) → 0
+//   "3.79%" → 3.79            "-" / "" → 0
 export function parseMoney(v: any): number {
   if (typeof v === 'number') return isFinite(v) ? v : 0;
   if (v == null) return 0;
   const raw = String(v).trim();
   if (!raw) return 0;
-  const neg = /^\(.*\)$/.test(raw) || raw.startsWith('-');
-  const cleaned = raw.replace(/[^0-9.]/g, '');
-  if (!cleaned) return 0;
-  const n = parseFloat(cleaned);
-  if (isNaN(n)) return 0;
+  if (/^#+$/.test(raw)) return 0; // Excel "########" overflow — value is lost
+  // Negative if wrapped in parens, or a minus sign survives once symbols/spaces go.
+  const signProbe = raw.replace(/[$£€,%\s]/g, '');
+  const neg = /^\(.*\)$/.test(raw) || signProbe.startsWith('-');
+  // Strip currency/grouping/percent/parens/spaces but KEEP digits, dot, e, sign.
+  let s = raw.replace(/[(),$£€%\s]/g, '').replace(/^[+-]/, '');
+  let n = Number(s); // Number() understands "6.22E+03"
+  if (!isFinite(n)) {
+    n = parseFloat(s.replace(/[^0-9.]/g, ''));
+    if (!isFinite(n)) return 0;
+  }
+  if (n === 0) return 0; // avoid "-0" from "-", "($0)", etc.
   return neg ? -Math.abs(n) : n;
+}
+
+// Integer count from a possibly comma-formatted cell: "1,491" → 1491.
+export function parseCount(v: any): number {
+  return Math.round(parseMoney(v));
 }
 
 function isGrossHeader(n: string): boolean {

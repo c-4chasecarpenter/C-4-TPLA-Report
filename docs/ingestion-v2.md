@@ -15,9 +15,18 @@ How to test: run tests with `npm test`. (Preview URLs: see Vercel note below.)
 | Phase | What | State |
 |---|---|---|
 | 0 | Vitest harness + fixture corpus + golden-number baseline | ✅ done (commit 5d0b8d8) |
-| 1 | Cleaning + mapping core (real-header detect, multi-sheet xlsx, hardened number parsing, headerless desk-log) | ⬜ not started |
-| 2 | Role-scoring detector + preview/override UI (replaces hardcoded signatures) | ⬜ not started |
+| 1 | Cleaning + mapping core — CSV path | 🔄 mostly done (see below) |
+| 2 | Preview/override UI (surface detection + let user correct) | ⬜ not started |
 | 3 | Matching polish (source aliases, reclassify-unknown-status, per-file error isolation) | ⬜ not started |
+
+**Phase 1 done so far (`lib/detect.ts`, CSV path):**
+- Hardened `parseMoney` + new `parseCount` (commas, sci-notation, `$-x`, `########`→0, `%`, `()`/`-`). Unit-tested in `lib/gross.test.ts`.
+- Generalized aggregated detector: real-header find (incl. 2-row super-header band forward-fill), role-scoring (source/leads/good/bad/dup/sold/gross), grand-total gross selection (no front+back+total double-count), PVR×sold flag, child-subrow + Total-row skipping.
+- Headerless desk-log detection by value-shape (status-vocab vote + date regex), synthesizes canonical column names.
+- Wired into `parseFile` as fallbacks AFTER existing detectors → no regression to working desk-log/old-aggregated paths.
+- Tests green: KAL (760/74/$154,831.57), Courtesy (251/20/$38,137.15), headerless Griffin (4 sold), desk-log baseline.
+
+**Phase 1 remaining:** multi-sheet `.xlsx` (read every sheet as a grid through the same detector + sheet→dealer/month mapping); run Excel path through `parseAggregatedGrid` too (Excel still always desk-log today); PVR fixture (Classic Chevy) + George Chevy / Diepholz fixtures & golden tests.
 
 ---
 
